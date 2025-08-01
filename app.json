@@ -1,0 +1,85 @@
+{
+  "expo": {
+    "name": "Pazi",
+    "slug": "pazi-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "net.pazziapp.mobile",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "This app needs access to your location to show your position on the map and for navigation.",
+        "NSLocationAlwaysUsageDescription": "This app needs access to your location even when the app is in the background.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to your location for best navigation experience.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        },
+        "UIBackgroundModes": [
+          "location",
+          "fetch",
+          "location",
+          "fetch"
+        ]
+      },
+      "bundleIdentifier": "net.pazziapp.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0066CC"
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
+      ],
+      "usesCleartextTraffic": true,
+      "edgeToEdgeEnabled": true,
+      "package": "net.pazziapp.mobile"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Patrol Navigation to use your location for showing your position on the map, navigation services, and patrol alerts."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Patrol Navigation to access your photos to set your profile picture."
+        }
+      ],
+      "expo-secure-store",
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsVersion": "11.8.0",
+          "RNMapboxMapsDownloadToken": "sk.eyJ1IjoibWlraWpha292IiwiYSI6ImNtYjlteTg3eDBiY3cyanNpNHk0NGZzdmsifQ.WHqEE3pbCFsEtovSCNZCnA"
+        }
+      ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "3fe9229b-c710-414a-bd64-054029d10abb"
+      }
+    },
+    "owner": "mikijakov"
+  }
+}

@@ -142,49 +142,146 @@ export const EnhancedNavigationInstructions: React.FC<EnhancedNavigationInstruct
     if (!currentStep) return null;
 
     const getManeuverIcon = (maneuverType: string) => {
+        // Google Maps style turn icons with rounded backgrounds
+        const iconSize = 32;
+        const iconColor = "#fff";
+        
         switch (maneuverType) {
             case 'turn-left':
             case 'turn left':
-                return <MaterialCommunityIcons name="arrow-left-bold" size={32} color="#fff" />;
+                return (
+                    <View style={styles.googleStyleIcon}>
+                        <MaterialCommunityIcons name="arrow-left-thick" size={iconSize} color={iconColor} />
+                    </View>
+                );
             case 'turn-right':
             case 'turn right':
-                return <MaterialCommunityIcons name="arrow-right-bold" size={32} color="#fff" />;
+                return (
+                    <View style={styles.googleStyleIcon}>
+                        <MaterialCommunityIcons name="arrow-right-thick" size={iconSize} color={iconColor} />
+                    </View>
+                );
             case 'straight':
             case 'continue':
             case 'depart':
-                return <MaterialCommunityIcons name="arrow-up-bold" size={32} color="#fff" />;
+                return (
+                    <View style={styles.googleStyleIcon}>
+                        <MaterialCommunityIcons name="arrow-up-thick" size={iconSize} color={iconColor} />
+                    </View>
+                );
             case 'uturn':
             case 'u-turn':
-                return <MaterialCommunityIcons name="backup-restore" size={32} color="#fff" />;
+                return (
+                    <View style={styles.googleStyleIcon}>
+                        <MaterialCommunityIcons name="backup-restore" size={iconSize} color={iconColor} />
+                    </View>
+                );
             case 'sharp-left':
-                return <MaterialCommunityIcons name="arrow-up-left-bold" size={32} color="#fff" />;
+                return (
+                    <View style={styles.googleStyleIcon}>
+                        <MaterialCommunityIcons name="arrow-top-left-thick" size={iconSize} color={iconColor} />
+                    </View>
+                );
             case 'sharp-right':
-                return <MaterialCommunityIcons name="arrow-up-right-bold" size={32} color="#fff" />;
+                return (
+                    <View style={styles.googleStyleIcon}>
+                        <MaterialCommunityIcons name="arrow-top-right-thick" size={iconSize} color={iconColor} />
+                    </View>
+                );
             case 'slight-left':
-                return <MaterialCommunityIcons name="arrow-up-left" size={32} color="#fff" />;
+                return (
+                    <View style={styles.googleStyleIcon}>
+                        <MaterialCommunityIcons name="arrow-top-left" size={iconSize} color={iconColor} />
+                    </View>
+                );
             case 'slight-right':
-                return <MaterialCommunityIcons name="arrow-up-right" size={32} color="#fff" />;
+                return (
+                    <View style={styles.googleStyleIcon}>
+                        <MaterialCommunityIcons name="arrow-top-right" size={iconSize} color={iconColor} />
+                    </View>
+                );
             case 'roundabout':
             case 'roundabout-left':
             case 'roundabout-right':
             case 'roundabout-straight':
             case 'rotary':
-                return <MaterialCommunityIcons name="rotate-360" size={32} color="#fff" />;
+                return (
+                    <View style={styles.googleStyleIcon}>
+                        <MaterialCommunityIcons name="rotate-360" size={iconSize} color={iconColor} />
+                    </View>
+                );
             case 'merge':
-                return <MaterialCommunityIcons name="merge" size={32} color="#fff" />;
+            case 'merge-left':
+                return (
+                    <View style={styles.googleStyleIcon}>
+                        <MaterialCommunityIcons name="merge" size={iconSize} color={iconColor} />
+                    </View>
+                );
+            case 'merge-right':
+                return (
+                    <View style={styles.googleStyleIcon}>
+                        <MaterialCommunityIcons name="merge" size={iconSize} color={iconColor} style={{ transform: [{ scaleX: -1 }] }} />
+                    </View>
+                );
             case 'fork':
-                return <MaterialCommunityIcons name="source-fork" size={32} color="#fff" />;
+            case 'fork-left':
+                return (
+                    <View style={styles.googleStyleIcon}>
+                        <MaterialCommunityIcons name="call-split" size={iconSize} color={iconColor} />
+                    </View>
+                );
+            case 'fork-right':
+                return (
+                    <View style={styles.googleStyleIcon}>
+                        <MaterialCommunityIcons name="call-split" size={iconSize} color={iconColor} style={{ transform: [{ scaleX: -1 }] }} />
+                    </View>
+                );
             case 'ramp':
             case 'on-ramp':
+            case 'ramp-right':
+                return (
+                    <View style={styles.googleStyleIcon}>
+                        <MaterialCommunityIcons name="arrow-top-right-thick" size={iconSize} color={iconColor} />
+                    </View>
+                );
             case 'off-ramp':
-                return <MaterialCommunityIcons name="highway" size={32} color="#fff" />;
+            case 'ramp-left':
+                return (
+                    <View style={styles.googleStyleIcon}>
+                        <MaterialCommunityIcons name="arrow-top-left-thick" size={iconSize} color={iconColor} />
+                    </View>
+                );
             case 'arrive':
             case 'destination':
-                return <MaterialCommunityIcons name="flag-checkered" size={32} color="#fff" />;
+                return (
+                    <View style={[styles.googleStyleIcon, { backgroundColor: '#4CAF50' }]}>
+                        <MaterialCommunityIcons name="flag-checkered" size={iconSize} color={iconColor} />
+                    </View>
+                );
             case 'exit':
-                return <MaterialCommunityIcons name="exit-to-app" size={32} color="#fff" />;
+                return (
+                    <View style={styles.googleStyleIcon}>
+                        <MaterialCommunityIcons name="exit-to-app" size={iconSize} color={iconColor} />
+                    </View>
+                );
+            case 'keep-left':
+                return (
+                    <View style={styles.googleStyleIcon}>
+                        <MaterialCommunityIcons name="arrow-top-left" size={iconSize} color={iconColor} />
+                    </View>
+                );
+            case 'keep-right':
+                return (
+                    <View style={styles.googleStyleIcon}>
+                        <MaterialCommunityIcons name="arrow-top-right" size={iconSize} color={iconColor} />
+                    </View>
+                );
             default:
-                return <MaterialCommunityIcons name="arrow-up-bold" size={32} color="#fff" />;
+                return (
+                    <View style={styles.googleStyleIcon}>
+                        <MaterialCommunityIcons name="arrow-up-thick" size={iconSize} color={iconColor} />
+                    </View>
+                );
         }
     };
 
@@ -549,6 +646,21 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#333',
         fontStyle: 'italic',
+    },
+    googleStyleIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: 'rgba(255, 255, 255, 0.15)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.2)',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
     },
 });
 

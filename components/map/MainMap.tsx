@@ -4,6 +4,7 @@ import * as Location from 'expo-location';
 import { Patrol } from '../../types/patrol';
 import { PatrolMarker } from './PatrolMarker';
 import { UserLocationMarker } from './UserLocationMarker';
+import { PlaceMarker, FallbackPlaceMarker } from './PlaceMarker';
 import { useNavigation } from '../../context/NavigationContext';
 import MapboxGL from '@rnmapbox/maps';
 import { FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -12,6 +13,8 @@ import locationTrackingService, { LocationData } from '../../services/location/l
 import navigationService, { NavigationState } from '../../services/navigation/navigationService';
 import { MovingArrow } from './MovingArrow';
 import { RouteProgressIndicator } from './RouteProgressIndicator';
+import { RealTimeDirectionIndicator } from '../navigation/RealTimeDirectionIndicator';
+import { Place } from '../../services/map/placesService';
 const { width, height } = Dimensions.get('window');
 
 // Check if we're in Expo Go - simpler approach
@@ -63,6 +66,8 @@ interface PatrolMapViewProps {
     onRouteSelect?: (index: number) => void;
     navigationStartLocation?: any;
     compassHeading?: number;
+    nearbyPlaces?: Place[];
+    onPlaceSelect?: (place: Place) => void;
 }
 
 export interface PatrolMapViewRef {
@@ -83,7 +88,9 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
                                   routes = [],
                                   selectedRouteIndex = 0,
                                   onRouteSelect,
-                                  compassHeading
+                                  compassHeading,
+                                  nearbyPlaces = [],
+                                  onPlaceSelect
                               }, ref) => {
     const mapRef = useRef<any>(null);
     const cameraRef = useRef<any>(null);
@@ -318,10 +325,14 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
 
     // Calculate heading based on route direction
     const calculateRouteHeading = (coordinates: [number, number][]) => {
-        if (coordinates.length < 2) return 0;
+        if (!coordinates || coordinates.length < 2) return 0;
         
         const start = coordinates[0];
         const end = coordinates[1];
+        
+        // Safety checks for coordinate values
+        if (!start || !end || start.length !== 2 || end.length !== 2) return 0;
+        if (isNaN(start[0]) || isNaN(start[1]) || isNaN(end[0]) || isNaN(end[1])) return 0;
         
         // Calculate bearing between first two points
         const toRad = (degrees: number) => degrees * (Math.PI / 180);
@@ -508,12 +519,111 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
         return routeCoords.length - 1;
     }
 
+    // Get current route direction based on polyline
+    function getCurrentRouteDirection(userLat: number, userLng: number, routeCoords: [number, number][], currentIndex: number): {
+        direction: 'straight' | 'left' | 'right' | 'sharp-left' | 'sharp-right' | 'slight-left' | 'slight-right' | 'u-turn',
+        bearing: number,
+        nextTurnDistance: number
+    } {
+        // Safety checks
+        if (!routeCoords || routeCoords.length < 3 || currentIndex >= routeCoords.length - 2 || currentIndex < 0) {
+            return { direction: 'straight', bearing: 0, nextTurnDistance: 0 };
+        }
+        
+        if (!userLat || !userLng || isNaN(userLat) || isNaN(userLng)) {
+            return { direction: 'straight', bearing: 0, nextTurnDistance: 0 };
+        }
+
+        // Look ahead to find the next significant turn
+        const lookAheadDistance = 50; // meters - reduced for more responsive detection
+        let accumulatedDistance = 0;
+        let nextTurnIndex = currentIndex + 1;
+        
+        // Find next significant direction change within lookAheadDistance
+        for (let i = currentIndex; i < routeCoords.length - 2; i++) {
+            const segStart = routeCoords[i];
+            const segEnd = routeCoords[i + 1];
+            const segmentLength = getDistance(segStart[1], segStart[0], segEnd[1], segEnd[0]);
+            
+            if (accumulatedDistance + segmentLength >= lookAheadDistance) {
+                nextTurnIndex = i + 1;
+                break;
+            }
+            
+            accumulatedDistance += segmentLength;
+            
+            // Check for significant bearing change
+            const currentBearing = calculateRouteHeading([routeCoords[i], routeCoords[i + 1]]);
+            const nextBearing = calculateRouteHeading([routeCoords[i + 1], routeCoords[i + 2]]);
+            const bearingDiff = Math.abs(nextBearing - currentBearing);
+            const normalizedDiff = bearingDiff > 180 ? 360 - bearingDiff : bearingDiff;
+            
+            if (normalizedDiff > 10) { // Reduced threshold for more sensitive turn detection
+                nextTurnIndex = i + 1;
+                break;
+            }
+        }
+
+        // Calculate current segment bearing
+        const currentSegment = routeCoords[currentIndex];
+        const nextSegment = routeCoords[Math.min(currentIndex + 1, routeCoords.length - 1)];
+        const currentBearing = calculateRouteHeading([currentSegment, nextSegment]);
+
+        // Calculate next turn bearing if found
+        if (nextTurnIndex < routeCoords.length - 1) {
+            const turnPoint = routeCoords[nextTurnIndex];
+            const afterTurnPoint = routeCoords[nextTurnIndex + 1];
+            const nextBearing = calculateRouteHeading([turnPoint, afterTurnPoint]);
+            
+            // Calculate turn angle
+            let turnAngle = nextBearing - currentBearing;
+            if (turnAngle > 180) turnAngle -= 360;
+            if (turnAngle < -180) turnAngle += 360;
+            
+            // Classify turn direction - more sensitive thresholds
+            let direction: 'straight' | 'left' | 'right' | 'sharp-left' | 'sharp-right' | 'slight-left' | 'slight-right' | 'u-turn';
+            
+            if (Math.abs(turnAngle) < 10) {
+                direction = 'straight';
+            } else if (Math.abs(turnAngle) > 150) {
+                direction = 'u-turn';
+            } else if (turnAngle > 0) {
+                // Right turn
+                if (turnAngle > 100) direction = 'sharp-right';
+                else if (turnAngle > 30) direction = 'right';
+                else direction = 'slight-right';
+            } else {
+                // Left turn
+                if (turnAngle < -100) direction = 'sharp-left';
+                else if (turnAngle < -30) direction = 'left';
+                else direction = 'slight-left';
+            }
+            
+            // Calculate distance to next turn
+            let distanceToTurn = 0;
+            for (let i = currentIndex; i < nextTurnIndex; i++) {
+                const segStart = routeCoords[i];
+                const segEnd = routeCoords[i + 1];
+                distanceToTurn += getDistance(segStart[1], segStart[0], segEnd[1], segEnd[0]);
+            }
+            
+            return {
+                direction,
+                bearing: currentBearing,
+                nextTurnDistance: distanceToTurn
+            };
+        }
+
+        return { direction: 'straight', bearing: currentBearing, nextTurnDistance: 0 };
+    }
+
     // --- Enhanced navigation with full route display ---
     let fullRouteCoords = [];
     let traveledRouteCoords = [];
     let arrowCoord = null;
     let arrowHeading = 0;
     let userProgress = 0;
+    let currentRouteDirection: { direction: 'straight' | 'left' | 'right' | 'sharp-left' | 'sharp-right' | 'slight-left' | 'slight-right' | 'u-turn', bearing: number, nextTurnDistance: number } = { direction: 'straight', bearing: 0, nextTurnDistance: 0 };
     
     if (
         navigationMode === 'active' &&
@@ -566,6 +676,17 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
         // Set arrow position and heading
         arrowCoord = progress.coordinate;
         arrowHeading = progress.heading;
+        
+        // Calculate real-time route direction for navigation instructions
+        try {
+            currentRouteDirection = getCurrentRouteDirection(userLat, userLng, routeCoords, progress.index);
+            
+            // Log current route direction for debugging
+            console.log('🧭 Current Route Direction:', currentRouteDirection.direction, 'Distance to turn:', currentRouteDirection.nextTurnDistance.toFixed(1) + 'm');
+        } catch (error) {
+            console.error('❌ Error calculating route direction:', error);
+            currentRouteDirection = { direction: 'straight', bearing: 0, nextTurnDistance: 0 };
+        }
         
         // Check if user is off-route and needs recalculation
         const distanceFromRoute = getDistance(userLat, userLng, progress.coordinate[1], progress.coordinate[0]);
@@ -641,12 +762,48 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
   </MapboxGL.PointAnnotation>
 )} */}
 
-                {/* Enhanced navigation with progressive coloring */}
+                {/* Enhanced navigation with progressive route coloring */}
                 {navigationMode === 'active' && fullRouteCoords.length > 0 && (
                   <>
-                    {/* Traveled portion (grey) */}
+                    {/* Create single route with gradient from blue to grey based on user progress */}
+                    <ShapeSource 
+                        id="progressive-route" 
+                        shape={{
+                            type: 'Feature',
+                            properties: {
+                                traveledDistance: userProgress,
+                                totalDistance: (() => {
+                                    let total = 0;
+                                    for (let i = 0; i < fullRouteCoords.length - 1; i++) {
+                                        const segStart = fullRouteCoords[i];
+                                        const segEnd = fullRouteCoords[i + 1];
+                                        total += getDistance(segStart[1], segStart[0], segEnd[1], segEnd[0]);
+                                    }
+                                    return total;
+                                })()
+                            },
+                            geometry: {
+                                type: 'LineString',
+                                coordinates: fullRouteCoords,
+                            }
+                        }}
+                    >
+                        <LineLayer
+                            id="progressive-route-line"
+                            style={{
+                                lineColor: '#1976D2',
+                                lineWidth: 10,
+                                lineCap: 'round',
+                                lineJoin: 'round',
+                                lineOpacity: 0.9,
+                                lineSortKey: 10,
+                            }}
+                        />
+                    </ShapeSource>
+                    
+                    {/* Backup: Fallback to separate lines if gradient not supported */}
                     {traveledRouteCoords.length >= 2 && (
-                      <ShapeSource id="traveled-route" shape={{
+                      <ShapeSource id="traveled-route-fallback" shape={{
                           type: 'Feature',
                           geometry: {
                               type: 'LineString',
@@ -654,7 +811,7 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
                           }
                       }}>
                           <LineLayer
-                              id="traveled-route-line"
+                              id="traveled-route-line-fallback"
                               style={{
                                   lineColor: '#CCCCCC',
                                   lineWidth: 10,
@@ -667,16 +824,13 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
                       </ShapeSource>
                     )}
                     
-                    {/* Remaining portion (blue) */}
+                    {/* Remaining portion (blue) - fallback */}
                     {(() => {
-                        // Create remaining route coordinates from user position to end
                         const remainingCoords = [];
                         if (traveledRouteCoords.length > 0 && fullRouteCoords.length > 0) {
-                            // Start from last traveled point
                             const lastTraveledPoint = traveledRouteCoords[traveledRouteCoords.length - 1];
                             remainingCoords.push(lastTraveledPoint);
                             
-                            // Find corresponding index in full route
                             let startIndex = 0;
                             for (let i = 0; i < fullRouteCoords.length; i++) {
                                 if (Math.abs(fullRouteCoords[i][0] - lastTraveledPoint[0]) < 0.0001 && 
@@ -686,17 +840,15 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
                                 }
                             }
                             
-                            // Add remaining coordinates
                             for (let i = startIndex + 1; i < fullRouteCoords.length; i++) {
                                 remainingCoords.push(fullRouteCoords[i]);
                             }
                         } else {
-                            // If no traveled portion, show full route in blue
                             remainingCoords.push(...fullRouteCoords);
                         }
                         
                         return remainingCoords.length >= 2 ? (
-                            <ShapeSource id="remaining-route" shape={{
+                            <ShapeSource id="remaining-route-fallback" shape={{
                                 type: 'Feature',
                                 geometry: {
                                     type: 'LineString',
@@ -704,7 +856,7 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
                                 }
                             }}>
                                 <LineLayer
-                                    id="remaining-route-line"
+                                    id="remaining-route-line-fallback"
                                     style={{
                                         lineColor: '#1976D2',
                                         lineWidth: 10,
@@ -738,7 +890,7 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
                             const routeColor = isSelected ? '#1976D2' : '#CCCCCC'; // Blue for selected, light grey for others
                             
                             return (
-                                <>
+                                <React.Fragment key={`route-fragment-${index}`}>
                                     <ShapeSource
                                         key={`route-${index}`}
                                         id={`route-${index}`}
@@ -790,7 +942,7 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
                                             }}
                                         />
                                     </ShapeSource>
-                                </>
+                                </React.Fragment>
                             );
                         })}
                         
@@ -891,6 +1043,15 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
                     )
                 ))}
 
+                {/* Place markers (only show when not navigating) */}
+                {navigationMode !== 'active' && nearbyPlaces.map((place) => (
+                    <PlaceMarker
+                        key={place.id}
+                        place={place}
+                        onPress={(place) => onPlaceSelect && onPlaceSelect(place)}
+                    />
+                ))}
+
                 {/* Navigation Arrow - using ShapeSource for better layering control */}
                 {navigationMode === 'active' && arrowCoord && ShapeSource && (
                     <>
@@ -920,7 +1081,7 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
                                 style={{
                                     iconImage: 'navigation-arrow-icon',
                                     iconSize: 0.4,
-                                    iconRotate: arrowHeading-180, // Adjust for icon orientation (if icon points right by default, subtract 90)
+                                    iconRotate: arrowHeading -180, // Rotate arrow to match movement direction
                                     iconAnchor: 'center',
                                     symbolSortKey: 99999,
                                     iconAllowOverlap: true,                           
@@ -933,7 +1094,14 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
 
             </MapView>
 
-
+                {/* Real-time Direction Indicator */}
+                {navigationMode === 'active' && currentRouteDirection && (
+                    <RealTimeDirectionIndicator 
+                        direction={currentRouteDirection.direction}
+                        distance={currentRouteDirection.nextTurnDistance}
+                        isVisible={currentRouteDirection.nextTurnDistance > 0 || currentRouteDirection.direction !== 'straight'}
+                    />
+                )}
 
                 {/* Overlay UI Elements */}
                 {/* <StatsPanel />
@@ -978,7 +1146,12 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
                     onMapReady={handleMapReady}
                 showsUserLocation={true}
                 showsMyLocationButton={false}
-                    // showsCompass={true}
+                    showsCompass={false}
+                showsScale={false}
+                showsTraffic={true}
+                showsIndoors={true}
+                showsBuildings={true}
+                showsPointsOfInterest={true}
                     mapType={mapType}
             >
                 {/* Patrol markers */}
@@ -1009,6 +1182,16 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
       }}
     />
     </Marker>
+                ))}
+                
+                {/* Place markers (fallback) */}
+                {navigationMode !== 'active' && nearbyPlaces.map((place) => (
+                    <FallbackPlaceMarker
+                        key={place.id}
+                        place={place}
+                        onPress={(place) => onPlaceSelect && onPlaceSelect(place)}
+                        Marker={Marker}
+                    />
                 ))}
             </MapViewFallback>
 </View>

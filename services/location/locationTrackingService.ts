@@ -42,10 +42,10 @@ class LocationTrackingService {
 
     // Default configuration for navigation
     private defaultConfig: LocationTrackingConfig = {
-        accuracy: Location.Accuracy.BestForNavigation,
-        distanceInterval: 1, // 1 meter
-        timeInterval: 1000, // 1 second
-        backgroundUpdates: true,
+        accuracy: Location.Accuracy.High, // Use High instead of BestForNavigation to prevent crashes
+        distanceInterval: 5, // 5 meters to reduce load
+        timeInterval: 2000, // 2 seconds to reduce frequency
+        backgroundUpdates: false, // Disabled by default to avoid task manager errors
         activityType: Location.ActivityType.AutomotiveNavigation,
     };
 
@@ -60,12 +60,8 @@ class LocationTrackingService {
                 return false;
             }
 
-            // Request background permissions
-            const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
-            
-            if (backgroundStatus !== 'granted') {
-                console.warn('⚠️ Background location permission not granted - some features may be limited');
-            }
+            // Skip background permissions - not needed without expo-task-manager
+            console.log('📱 Background location permission skipped - not supported without expo-task-manager');
 
             console.log('✅ Location permissions granted');
             return true;
@@ -95,9 +91,10 @@ class LocationTrackingService {
             // Start heading tracking
             await this.startHeadingTracking();
 
-            // Start background tracking if enabled
+            // Skip background tracking completely - not supported without expo-task-manager
             if (finalConfig.backgroundUpdates) {
-                await this.startBackgroundTracking(finalConfig);
+                console.log('📱 Background location tracking disabled - using foreground tracking only');
+                console.log('💡 To enable background tracking, install expo-task-manager');
             }
 
             this.isTracking = true;
@@ -141,21 +138,32 @@ class LocationTrackingService {
     // Start foreground location tracking
     private async startForegroundTracking(config: LocationTrackingConfig) {
         try {
+            // Add validation to prevent crashes
+            if (!config) {
+                throw new Error('Invalid config provided for location tracking');
+            }
+
             this.foregroundSubscription = await Location.watchPositionAsync(
                 {
-                    accuracy: config.accuracy,
-                    distanceInterval: config.distanceInterval,
-                    timeInterval: config.timeInterval,
+                    accuracy: config.accuracy || Location.Accuracy.High,
+                    distanceInterval: Math.max(config.distanceInterval || 5, 1), // Minimum 1 meter
+                    timeInterval: Math.max(config.timeInterval || 2000, 1000), // Minimum 1 second
                     mayShowUserSettingsDialog: false,
                 },
                 (location) => {
-                    this.handleLocationUpdate(location);
+                    try {
+                        this.handleLocationUpdate(location);
+                    } catch (updateError) {
+                        console.error('❌ Error handling location update:', updateError);
+                        this.callbacks.onLocationError?.(updateError instanceof Error ? updateError.message : 'Location update error');
+                    }
                 }
             );
 
             console.log('📍 Foreground location tracking started');
         } catch (error) {
             console.error('❌ Error starting foreground location tracking:', error);
+            this.callbacks.onLocationError?.(error instanceof Error ? error.message : 'Location tracking error');
             throw error;
         }
     }
@@ -164,73 +172,36 @@ class LocationTrackingService {
     private async startHeadingTracking() {
         try {
             this.headingSubscription = await Location.watchHeadingAsync((heading) => {
-                if (this.lastLocation) {
-                    this.lastLocation.heading = heading.trueHeading;
-                    this.callbacks.onHeadingChange?.(heading.trueHeading);
+                try {
+                    if (this.lastLocation && heading && typeof heading.trueHeading === 'number') {
+                        this.lastLocation.heading = heading.trueHeading;
+                        this.callbacks.onHeadingChange?.(heading.trueHeading);
+                    }
+                } catch (headingError) {
+                    console.error('❌ Error handling heading update:', headingError);
                 }
             });
 
             console.log('🧭 Heading tracking started');
         } catch (error) {
             console.error('❌ Error starting heading tracking:', error);
+            // Don't throw here - heading is not critical for navigation
         }
     }
 
-    // Start background location tracking
+    // Start background location tracking - DISABLED
     private async startBackgroundTracking(config: LocationTrackingConfig) {
-        try {
-            const taskName = 'background-location-tracking';
-            
-            // Check if task is already registered
-            const isTaskRegistered = await Location.hasStartedLocationUpdatesAsync(taskName);
-            
-            if (isTaskRegistered) {
-                await Location.stopLocationUpdatesAsync(taskName);
-            }
-
-            // Start background location updates
-            await Location.startLocationUpdatesAsync(taskName, {
-                accuracy: config.accuracy,
-                distanceInterval: config.distanceInterval,
-                timeInterval: config.timeInterval,
-                foregroundService: {
-                    notificationTitle: "Navigation Active",
-                    notificationBody: "Tracking your location for navigation",
-                    notificationColor: "#0066CC",
-                },
-                activityType: config.activityType,
-                showsBackgroundLocationIndicator: true,
-                // Android-specific options
-                ...(Platform.OS === 'android' && {
-                    startForeground: true,
-                    stopForeground: false,
-                }),
-            });
-
-            this.isBackgroundTracking = true;
-            this.callbacks.onBackgroundLocationStart?.();
-            console.log('🔄 Background location tracking started');
-        } catch (error) {
-            console.error('❌ Error starting background location tracking:', error);
-        }
+        // Background location tracking completely disabled to prevent crashes
+        console.log('📱 Background location tracking disabled - requires expo-task-manager');
+        return Promise.resolve();
     }
 
-    // Stop background location tracking
+    // Stop background location tracking - DISABLED
     private async stopBackgroundTracking() {
-        try {
-            const taskName = 'background-location-tracking';
-            const isTaskRegistered = await Location.hasStartedLocationUpdatesAsync(taskName);
-            
-            if (isTaskRegistered) {
-                await Location.stopLocationUpdatesAsync(taskName);
-            }
-
-            this.isBackgroundTracking = false;
-            this.callbacks.onBackgroundLocationStop?.();
-            console.log('🛑 Background location tracking stopped');
-        } catch (error) {
-            console.error('❌ Error stopping background location tracking:', error);
-        }
+        // Background location tracking completely disabled 
+        this.isBackgroundTracking = false;
+        console.log('📱 Background location stop skipped - not active');
+        return Promise.resolve();
     }
 
     // Handle location updates

@@ -25,39 +25,121 @@ export function NavigationInstructions() {
     const maneuverType = steps[currentStep].maneuver.type;
 
     const getManeuverIcon = (type: string) => {
+        // Enhanced Google Maps style navigation icons
         switch (type) {
             case 'turn-left':
             case 'turn left':
-                return <MaterialCommunityIcons name="arrow-left-bold" size={32} color="#fff" />;
+                return (
+                    <View style={styles.iconContainer}>
+                        <MaterialCommunityIcons name="arrow-left-thick" size={36} color="#fff" />
+                    </View>
+                );
             case 'turn-right':
             case 'turn right':
-                return <MaterialCommunityIcons name="arrow-right-bold" size={32} color="#fff" />;
+                return (
+                    <View style={styles.iconContainer}>
+                        <MaterialCommunityIcons name="arrow-right-thick" size={36} color="#fff" />
+                    </View>
+                );
             case 'straight':
             case 'continue':
             case 'depart':
-                return <MaterialCommunityIcons name="arrow-up-bold" size={32} color="#fff" />;
+                return (
+                    <View style={styles.iconContainer}>
+                        <MaterialCommunityIcons name="arrow-up-thick" size={36} color="#fff" />
+                    </View>
+                );
             case 'uturn':
             case 'u-turn':
-                return <MaterialCommunityIcons name="backup-restore" size={32} color="#fff" />;
+                return (
+                    <View style={styles.iconContainer}>
+                        <MaterialCommunityIcons name="backup-restore" size={36} color="#fff" />
+                    </View>
+                );
             case 'sharp-left':
-                return <MaterialCommunityIcons name="arrow-up-left-bold" size={32} color="#fff" />;
+                return (
+                    <View style={styles.iconContainer}>
+                        <MaterialCommunityIcons name="arrow-top-left-thick" size={36} color="#fff" />
+                    </View>
+                );
             case 'sharp-right':
-                return <MaterialCommunityIcons name="arrow-up-right-bold" size={32} color="#fff" />;
+                return (
+                    <View style={styles.iconContainer}>
+                        <MaterialCommunityIcons name="arrow-top-right-thick" size={36} color="#fff" />
+                    </View>
+                );
             case 'slight-left':
-                return <MaterialCommunityIcons name="arrow-up-left" size={32} color="#fff" />;
+                return (
+                    <View style={styles.iconContainer}>
+                        <MaterialCommunityIcons name="arrow-top-left" size={36} color="#fff" />
+                    </View>
+                );
             case 'slight-right':
-                return <MaterialCommunityIcons name="arrow-up-right" size={32} color="#fff" />;
+                return (
+                    <View style={styles.iconContainer}>
+                        <MaterialCommunityIcons name="arrow-top-right" size={36} color="#fff" />
+                    </View>
+                );
             case 'roundabout':
             case 'roundabout-left':
             case 'roundabout-right':
             case 'roundabout-straight':
             case 'rotary':
-                return <MaterialCommunityIcons name="rotate-360" size={32} color="#fff" />;
+                return (
+                    <View style={styles.iconContainer}>
+                        <MaterialCommunityIcons name="rotate-360" size={36} color="#fff" />
+                    </View>
+                );
             case 'arrive':
             case 'destination':
-                return <MaterialCommunityIcons name="flag-checkered" size={32} color="#fff" />;
+                return (
+                    <View style={styles.iconContainer}>
+                        <MaterialCommunityIcons name="flag-checkered" size={36} color="#fff" />
+                    </View>
+                );
+            case 'merge':
+            case 'merge-left':
+                return (
+                    <View style={styles.iconContainer}>
+                        <MaterialCommunityIcons name="merge" size={36} color="#fff" />
+                    </View>
+                );
+            case 'merge-right':
+                return (
+                    <View style={styles.iconContainer}>
+                        <MaterialCommunityIcons name="merge" size={36} color="#fff" style={{ transform: [{ scaleX: -1 }] }} />
+                    </View>
+                );
+            case 'fork-left':
+                return (
+                    <View style={styles.iconContainer}>
+                        <MaterialCommunityIcons name="call-split" size={36} color="#fff" />
+                    </View>
+                );
+            case 'fork-right':
+                return (
+                    <View style={styles.iconContainer}>
+                        <MaterialCommunityIcons name="call-split" size={36} color="#fff" style={{ transform: [{ scaleX: -1 }] }} />
+                    </View>
+                );
+            case 'ramp-left':
+                return (
+                    <View style={styles.iconContainer}>
+                        <MaterialCommunityIcons name="arrow-top-left-thick" size={36} color="#fff" />
+                    </View>
+                );
+            case 'ramp-right':
+                return (
+                    <View style={styles.iconContainer}>
+                        <MaterialCommunityIcons name="arrow-top-right-thick" size={36} color="#fff" />
+                    </View>
+                );
             default:
-                return <MaterialCommunityIcons name="arrow-up-bold" size={32} color="#fff" />;
+                return (
+                    <View style={styles.iconContainer}>
+                        <MaterialCommunityIcons name="arrow-up-thick" size={36} color="#fff" />
+                    </View>
+                );
         }
     };
 
@@ -68,7 +150,9 @@ export function NavigationInstructions() {
                 <Text style={styles.duration}>{Math.round(duration / 60)} min</Text>
             </View>
             <View style={styles.instructionsContainer}>
-                {getManeuverIcon(maneuverType)}
+                <View style={styles.maneuverIconWrapper}>
+                    {getManeuverIcon(maneuverType)}
+                </View>
                 <View style={styles.instructionTextContainer}>
                     <Text style={styles.instruction}>{instruction}</Text>
                     <Text style={styles.nextStepDistance}>In {distanceToNext.toFixed(0)} meters</Text>
@@ -115,6 +199,21 @@ const styles = StyleSheet.create({
     instructionsContainer: {
         flexDirection: 'row',
         alignItems: 'center',
+    },
+    maneuverIconWrapper: {
+        marginRight: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    iconContainer: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 2,
+        borderColor: 'rgba(255, 255, 255, 0.3)',
     },
     instructionTextContainer: {
         flex: 1,

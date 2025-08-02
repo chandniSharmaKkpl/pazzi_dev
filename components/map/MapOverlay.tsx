@@ -22,6 +22,7 @@ interface MapOverlaysProps {
     onLayerChange: (layer: string) => void;
     onReportPatrol: () => void;
     showSearchBar?: boolean; // Added showSearchBar prop
+    onPlacesToggle?: () => void;
 }
 export function MapOverlays({
     topInset,
@@ -36,6 +37,7 @@ export function MapOverlays({
     onLayerChange,
     onReportPatrol,
     showSearchBar = true,
+    onPlacesToggle,
 }: MapOverlaysProps) {
     const { theme } = useTheme();
     const [searchFocused, setSearchFocused] = React.useState(false);
@@ -59,7 +61,7 @@ export function MapOverlays({
             )}
 
             {/* Floating Control Panel */}
-            <View style={[styles.controlPanel, { top: topInset + (showSearchBar ? 80 : 20) }]}>
+            <View style={[styles.controlPanel, { top: topInset + (showSearchBar ? 490 :490) }]}>
                 <MapControls
                     onZoomToUser={onZoomToUser}
                     hasLocation={hasLocation}

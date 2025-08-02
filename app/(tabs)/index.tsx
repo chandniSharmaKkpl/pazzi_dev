@@ -8,7 +8,6 @@ import { useLocation } from '../../context/LocationContext';
 import {PatrolProvider} from '../../context/PatrolContext';
 import { useWebSocket } from '../../context/WebSocketContext';
 import directionsService from '../../services/map/directionsService';
-import locationTrackingService, { LocationData } from '../../services/location/locationTrackingService';
 import navigationService, { NavigationState } from '../../services/navigation/navigationService';
 import { EnhancedNavigationInstructions } from '../../components/navigation/EnhancedNavigationInstructions';
 
@@ -23,6 +22,9 @@ import { PatrolType, Patrol } from "../../types/patrol";
 import MapboxGL from '@rnmapbox/maps';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PatrolMarker } from '../../components/map/PatrolMarker';
+import { PlaceCategories, CompactPlaceCategories } from '../../components/map/PlaceCategories';
+import { PlaceDetailsModal } from '../../components/places/PlaceDetailsModal';
+import placesService, { Place, PlaceCategory, PLACE_CATEGORIES } from '../../services/map/placesService';
 import * as Location from 'expo-location';
 
 MapboxGL.setAccessToken('pk.eyJ1IjoibWlraWpha292IiwiYSI6ImNtYjlscWc3YzB6N2Iya3M2cmQxY2Y5eWEifQ.u_y6rM-a77gBQBhZJ8KkNw'); // Place this at the top level, before any map rendering
@@ -119,6 +121,13 @@ function MapScreenContent() {
 
     const [compassHeading, setCompassHeading] = useState(0);
 
+    // --- Places state ---
+    const [nearbyPlaces, setNearbyPlaces] = useState<Place[]>([]);
+    const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
+    const [showPlaceCategories, setShowPlaceCategories] = useState(false);
+    const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+    const [placesLoading, setPlacesLoading] = useState(false);
+
     const searchTimeout = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
@@ -160,7 +169,7 @@ function MapScreenContent() {
         return R * c;
     }
 
-    // --- Mapbox Geocoding API search ---
+    // --- Enhanced search with places integration ---
     const handleSearch = (query: string) => {
         setSearchText(query);
         if (searchTimeout.current) {
@@ -176,15 +185,29 @@ function MapScreenContent() {
         setShowSearchResults(true);
         searchTimeout.current = setTimeout(async () => {
             try {
-                const MAPBOX_TOKEN = 'pk.eyJ1IjoibWlraWpha292IiwiYSI6ImNtYjlscWc3YzB6N2Iya3M2cmQxY2Y5eWEifQ.u_y6rM-a77gBQBhZJ8KkNw';
-                const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_TOKEN}&autocomplete=true&limit=5&country=IN`;
-                const response = await fetch(url);
-                const data = await response.json();
-                if (data && data.features) {
-                    setSearchResults(data.features);
-                } else {
-                    setSearchResults([]);
-                }
+                // Search both places and addresses
+                const [placesResults, addressResults] = await Promise.all([
+                    location ? placesService.searchPlaces(query, {
+                        latitude: location.coords.latitude,
+                        longitude: location.coords.longitude
+                    }, 5) : Promise.resolve([]),
+                    searchAddresses(query)
+                ]);
+
+                // Combine and format results
+                const combinedResults = [
+                    ...addressResults,
+                    ...placesResults.map(place => ({
+                        id: place.id,
+                        place_name: place.name,
+                        text: place.name,
+                        center: place.coordinates,
+                        properties: { category: place.category },
+                        isPlace: true
+                    }))
+                ];
+
+                setSearchResults(combinedResults);
             } catch (e) {
                 setSearchResults([]);
             } finally {
@@ -192,6 +215,104 @@ function MapScreenContent() {
             }
         }, 400); // 400ms debounce
     };
+
+    // Helper function to search addresses using Mapbox Geocoding
+    const searchAddresses = async (query: string) => {
+        try {
+            const MAPBOX_TOKEN = 'pk.eyJ1IjoibWlraWpha292IiwiYSI6ImNtYjlscWc3YzB6N2Ika3M2cmQxY2Y5eWEifQ.u_y6rM-a77gBQBhZJ8KkNw';
+            const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_TOKEN}&autocomplete=true&limit=5&country=IN`;
+            const response = await fetch(url);
+            const data = await response.json();
+            return data?.features || [];
+        } catch (e) {
+            return [];
+        }
+    };
+
+    // --- Places search functions ---
+    const searchNearbyPlaces = async (category?: PlaceCategory) => {
+        if (!location) return;
+
+        setPlacesLoading(true);
+        try {
+            const userLocation = {
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude
+            };
+
+            let places: Place[] = [];
+            if (category) {
+                places = await placesService.searchNearbyPlaces(userLocation, category, 20);
+            } else {
+                places = await placesService.getPopularPlaces(userLocation, 30);
+            }
+
+            setNearbyPlaces(places);
+            console.log(`🏪 Found ${places.length} places`, category ? `for ${category.name}` : '(popular)');
+        } catch (error) {
+            console.error('❌ Error searching places:', error);
+        } finally {
+            setPlacesLoading(false);
+        }
+    };
+
+    // Handle category selection
+    const handleCategoryPress = async (category: PlaceCategory) => {
+        setShowPlaceCategories(false);
+        await searchNearbyPlaces(category);
+    };
+
+    // Handle category toggle (for filtering)
+    const handleCategoryToggle = (categoryId: string) => {
+        setSelectedCategories(prev => {
+            const newSelection = prev.includes(categoryId)
+                ? prev.filter(id => id !== categoryId)
+                : [...prev, categoryId];
+            
+            // Filter existing places based on new selection
+            if (newSelection.length === 0) {
+                // Show all places if no category selected
+                searchNearbyPlaces();
+            } else {
+                // Filter places by selected categories
+                const filteredPlaces = nearbyPlaces.filter(place => 
+                    newSelection.includes(place.category)
+                );
+                setNearbyPlaces(filteredPlaces);
+            }
+            
+            return newSelection;
+        });
+    };
+
+    // Handle place selection
+    const handlePlaceSelect = (place: Place) => {
+        setSelectedPlace(place);
+    };
+
+    // Handle place navigation
+    const handlePlaceNavigation = async (place: Place) => {
+        if (!location) return;
+
+        try {
+            const destination = {
+                center: place.coordinates,
+                place_name: place.name,
+                text: place.name
+            };
+
+            await handleSearchResultSelect(destination);
+        } catch (error) {
+            Alert.alert('Navigation Error', 'Could not start navigation to this place');
+        }
+    };
+
+    // Load popular places when location changes
+    useEffect(() => {
+        if (location && !navigationMode) {
+            searchNearbyPlaces();
+        }
+    }, [location?.coords?.latitude, location?.coords?.longitude]);
 
     // --- Handle search result selection (fetch directions and show preview) ---
     const handleSearchResultSelect = async (result: any) => {
@@ -262,102 +383,312 @@ function MapScreenContent() {
         setSmoothNavigationRoute(smoothRoute);
     };
 
-    // Helper to improve instruction text - convert east/west to left/right
-    const improveInstructionText = (instruction: string, maneuverType: string | undefined, step?: any): string => {
-        if (!instruction || typeof instruction !== 'string') return 'Continue ahead';
-        if (!maneuverType) maneuverType = 'straight';
-        
-        let improvedInstruction = instruction;
-        
-        // If we have bearing information, use it to determine actual left/right
-        if (step?.maneuver?.bearing_before !== undefined && step?.maneuver?.bearing_after !== undefined) {
-            const bearingBefore = step.maneuver.bearing_before;
-            const bearingAfter = step.maneuver.bearing_after;
-            const bearingDiff = (bearingAfter - bearingBefore + 360) % 360;
-            
-            console.log('🧮 Bearing Calculation:', {
-                bearingBefore,
-                bearingAfter,
-                bearingDiff,
-                originalInstruction: instruction
-            });
-            
-            // Determine turn direction based on bearing change
-            if (bearingDiff > 15 && bearingDiff < 180) {
-                // Right turn
-                console.log('➡️ Detected RIGHT turn');
-                improvedInstruction = improvedInstruction
-                    .replace(/drive (north|south|east|west)/gi, 'turn right')
-                    .replace(/turn (north|south|east|west)/gi, 'turn right')
-                    .replace(/head (north|south|east|west)/gi, 'turn right')
-                    .replace(/bear (north|south|east|west)/gi, 'keep right')
-                    .replace(/(north|south|east|west)/gi, 'right');
-            } else if (bearingDiff > 180 && bearingDiff < 345) {
-                // Left turn
-                console.log('⬅️ Detected LEFT turn');
-                improvedInstruction = improvedInstruction
-                    .replace(/drive (north|south|east|west)/gi, 'turn left')
-                    .replace(/turn (north|south|east|west)/gi, 'turn left')
-                    .replace(/head (north|south|east|west)/gi, 'turn left')
-                    .replace(/bear (north|south|east|west)/gi, 'keep left')
-                    .replace(/(north|south|east|west)/gi, 'left');
-            } else {
-                // Straight
-                console.log('⬆️ Detected STRAIGHT');
-                improvedInstruction = improvedInstruction
-                    .replace(/drive (north|south|east|west)/gi, 'continue straight')
-                    .replace(/turn (north|south|east|west)/gi, 'continue straight')
-                    .replace(/head (north|south|east|west)/gi, 'continue straight')
-                    .replace(/bear (north|south|east|west)/gi, 'continue straight')
-                    .replace(/(north|south|east|west)/gi, 'straight');
-            }
-        } else {
-            // Fallback to maneuver type matching
-            const patterns = [
-                { from: /drive (north|south|east|west)/gi, replacement: () => {
-                    if (maneuverType.includes('left')) return 'turn left';
-                    if (maneuverType.includes('right')) return 'turn right';
-                    return 'continue straight';
-                }},
-                { from: /turn (north|south|east|west)/gi, replacement: () => {
-                    if (maneuverType.includes('left')) return 'turn left';
-                    if (maneuverType.includes('right')) return 'turn right';
-                    return 'continue straight';
-                }},
-                { from: /head (north|south|east|west)/gi, replacement: 'continue straight' },
-                { from: /continue (north|south|east|west)/gi, replacement: 'continue straight' },
-                { from: /bear (north|south|east|west)/gi, replacement: () => {
-                    if (maneuverType.includes('left')) return 'keep left';
-                    if (maneuverType.includes('right')) return 'keep right';
-                    return 'continue straight';
-                }},
-                { from: /(north|south|east|west)/gi, replacement: () => {
-                    if (maneuverType.includes('left')) return 'left';
-                    if (maneuverType.includes('right')) return 'right';
-                    return 'straight';
-                }},
-            ];
-
-            patterns.forEach(pattern => {
-                if (typeof pattern.replacement === 'function') {
-                    improvedInstruction = improvedInstruction.replace(pattern.from, pattern.replacement);
-                } else {
-                    improvedInstruction = improvedInstruction.replace(pattern.from, pattern.replacement);
-                }
-            });
+    // Enhanced function to analyze polyline and determine real-time turn direction
+    const analyzePolylineDirection = (userLocation: any, routeCoords: [number, number][]): {
+        direction: 'straight' | 'left' | 'right' | 'sharp-left' | 'sharp-right' | 'slight-left' | 'slight-right' | 'u-turn',
+        bearing: number,
+        nextTurnDistance: number
+    } => {
+        if (!userLocation || !routeCoords || routeCoords.length < 3) {
+            return { direction: 'straight', bearing: 0, nextTurnDistance: 0 };
         }
 
-        // Clean up text
-        improvedInstruction = improvedInstruction
-            .replace(/in \d+(\.\d+)? (meters|m)/gi, '') // Remove distance from instruction
-            .replace(/\s+/g, ' ') // Clean up extra spaces
-            .trim();
+        const userLat = userLocation.coords.latitude;
+        const userLng = userLocation.coords.longitude;
 
-        return improvedInstruction;
+        // Find closest point on route
+        let minDist = Infinity;
+        let closestIndex = 0;
+        
+        for (let i = 0; i < routeCoords.length; i++) {
+            const [lng, lat] = routeCoords[i];
+            const dist = getDistance(userLat, userLng, lat, lng);
+            if (dist < minDist) {
+                minDist = dist;
+                closestIndex = i;
+            }
+        }
+
+        // Look ahead to find next significant turn
+        const lookAheadDistance = 100; // meters
+        let accumulatedDistance = 0;
+        let nextTurnIndex = closestIndex;
+        
+        for (let i = closestIndex; i < routeCoords.length - 2; i++) {
+            const segStart = routeCoords[i];
+            const segEnd = routeCoords[i + 1];
+            const segmentLength = getDistance(segStart[1], segStart[0], segEnd[1], segEnd[0]);
+            
+            if (accumulatedDistance + segmentLength >= lookAheadDistance) {
+                nextTurnIndex = i + 1;
+                break;
+            }
+            
+            accumulatedDistance += segmentLength;
+            
+            // Check for significant bearing change
+            if (i + 2 < routeCoords.length) {
+                const currentBearing = calculateBearing(routeCoords[i], routeCoords[i + 1]);
+                const nextBearing = calculateBearing(routeCoords[i + 1], routeCoords[i + 2]);
+                const bearingDiff = Math.abs(nextBearing - currentBearing);
+                const normalizedDiff = bearingDiff > 180 ? 360 - bearingDiff : bearingDiff;
+                
+                if (normalizedDiff > 15) { // Significant turn detected
+                    nextTurnIndex = i + 1;
+                    break;
+                }
+            }
+        }
+
+        // Calculate turn direction if we found a turn
+        let direction: 'straight' | 'left' | 'right' | 'sharp-left' | 'sharp-right' | 'slight-left' | 'slight-right' | 'u-turn' = 'straight';
+        let bearing = 0;
+        let nextTurnDistance = 0;
+
+        if (nextTurnIndex < routeCoords.length - 1 && closestIndex < routeCoords.length - 1) {
+            // Calculate current direction
+            const currentBearing = calculateBearing(routeCoords[closestIndex], routeCoords[Math.min(closestIndex + 1, routeCoords.length - 1)]);
+            
+            // Calculate turn direction
+            if (nextTurnIndex + 1 < routeCoords.length) {
+                const nextBearing = calculateBearing(routeCoords[nextTurnIndex], routeCoords[nextTurnIndex + 1]);
+                let turnAngle = nextBearing - currentBearing;
+                
+                // Normalize turn angle
+                if (turnAngle > 180) turnAngle -= 360;
+                if (turnAngle < -180) turnAngle += 360;
+                
+                // Classify turn
+                if (Math.abs(turnAngle) < 10) {
+                    direction = 'straight';
+                } else if (Math.abs(turnAngle) > 150) {
+                    direction = 'u-turn';
+                } else if (turnAngle > 0) {
+                    // Right turn
+                    if (turnAngle > 90) direction = 'sharp-right';
+                    else if (turnAngle > 35) direction = 'right';
+                    else direction = 'slight-right';
+                } else {
+                    // Left turn
+                    if (turnAngle < -90) direction = 'sharp-left';
+                    else if (turnAngle < -35) direction = 'left';
+                    else direction = 'slight-left';
+                }
+                
+                // Calculate distance to turn
+                for (let i = closestIndex; i < nextTurnIndex; i++) {
+                    if (i + 1 < routeCoords.length) {
+                        const segStart = routeCoords[i];
+                        const segEnd = routeCoords[i + 1];
+                        nextTurnDistance += getDistance(segStart[1], segStart[0], segEnd[1], segEnd[0]);
+                    }
+                }
+            }
+            
+            bearing = currentBearing;
+        }
+
+        return { direction, bearing, nextTurnDistance };
     };
 
-    // Helper to get Google Maps style maneuver icon
+    // Helper function to calculate bearing between two points
+    const calculateBearing = (point1: [number, number], point2: [number, number]): number => {
+        const toRad = (degrees: number) => degrees * (Math.PI / 180);
+        const toDeg = (radians: number) => radians * (180 / Math.PI);
+        
+        const dLon = toRad(point2[0] - point1[0]);
+        const lat1 = toRad(point1[1]);
+        const lat2 = toRad(point2[1]);
+        
+        const y = Math.sin(dLon) * Math.cos(lat2);
+        const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+        
+        let bearing = toDeg(Math.atan2(y, x));
+        bearing = (bearing + 360) % 360; // Normalize to 0-360
+        
+        return bearing;
+    };
+
+    // Helper to improve instruction text - convert east/west to left/right using real-time polyline analysis
+    // const improveInstructionText = (instruction: string, maneuverType: string | undefined, step?: any): string => {
+    //     if (!instruction || typeof instruction !== 'string') return 'Continue ahead';
+    //     if (!maneuverType) maneuverType = 'straight';
+        
+    //     let improvedInstruction = instruction;
+        
+    //     // Use real-time polyline analysis if we have location and route
+    //     if (location && navigationRoute?.geometry?.coordinates) {
+    //         const polylineDirection = analyzePolylineDirection(location, navigationRoute.geometry.coordinates);
+            
+    //         console.log('🗺️ Real-time Polyline Direction:', polylineDirection);
+            
+    //         // Override instruction based on real-time polyline analysis
+    //         switch (polylineDirection.direction) {
+    //             case 'left':
+    //                 improvedInstruction = improvedInstruction
+    //                     .replace(/drive (north|south|east|west)/gi, 'turn left')
+    //                     .replace(/turn (north|south|east|west)/gi, 'turn left')
+    //                     .replace(/head (north|south|east|west)/gi, 'turn left')
+    //                     .replace(/(north|south|east|west)/gi, 'left');
+    //                 break;
+    //             case 'right':
+    //                 improvedInstruction = improvedInstruction
+    //                     .replace(/drive (north|south|east|west)/gi, 'turn right')
+    //                     .replace(/turn (north|south|east|west)/gi, 'turn right')
+    //                     .replace(/head (north|south|east|west)/gi, 'turn right')
+    //                     .replace(/(north|south|east|west)/gi, 'right');
+    //                 break;
+    //             case 'sharp-left':
+    //                 improvedInstruction = improvedInstruction
+    //                     .replace(/drive (north|south|east|west)/gi, 'sharp left turn')
+    //                     .replace(/turn (north|south|east|west)/gi, 'sharp left turn')
+    //                     .replace(/(north|south|east|west)/gi, 'sharp left');
+    //                 break;
+    //             case 'sharp-right':
+    //                 improvedInstruction = improvedInstruction
+    //                     .replace(/drive (north|south|east|west)/gi, 'sharp right turn')
+    //                     .replace(/turn (north|south|east|west)/gi, 'sharp right turn')
+    //                     .replace(/(north|south|east|west)/gi, 'sharp right');
+    //                 break;
+    //             case 'slight-left':
+    //                 improvedInstruction = improvedInstruction
+    //                     .replace(/drive (north|south|east|west)/gi, 'keep left')
+    //                     .replace(/turn (north|south|east|west)/gi, 'keep left')
+    //                     .replace(/(north|south|east|west)/gi, 'slight left');
+    //                 break;
+    //             case 'slight-right':
+    //                 improvedInstruction = improvedInstruction
+    //                     .replace(/drive (north|south|east|west)/gi, 'keep right')
+    //                     .replace(/turn (north|south|east|west)/gi, 'keep right')
+    //                     .replace(/(north|south|east|west)/gi, 'slight right');
+    //                 break;
+    //             case 'u-turn':
+    //                 improvedInstruction = 'Make a U-turn';
+    //                 break;
+    //             default:
+    //                 improvedInstruction = improvedInstruction
+    //                     .replace(/drive (north|south|east|west)/gi, 'continue straight')
+    //                     .replace(/turn (north|south|east|west)/gi, 'continue straight')
+    //                     .replace(/head (north|south|east|west)/gi, 'continue straight')
+    //                     .replace(/(north|south|east|west)/gi, 'straight');
+    //         }
+    //     } else if (step?.maneuver?.bearing_before !== undefined && step?.maneuver?.bearing_after !== undefined) {
+    //         // Fallback to bearing-based analysis
+    //         const bearingBefore = step.maneuver.bearing_before;
+    //         const bearingAfter = step.maneuver.bearing_after;
+    //         const bearingDiff = (bearingAfter - bearingBefore + 360) % 360;
+            
+    //         console.log('🧮 Bearing Calculation:', {
+    //             bearingBefore,
+    //             bearingAfter,
+    //             bearingDiff,
+    //             originalInstruction: instruction
+    //         });
+            
+    //         // Determine turn direction based on bearing change
+    //         if (bearingDiff > 15 && bearingDiff < 180) {
+    //             // Right turn
+    //             console.log('➡️ Detected RIGHT turn');
+    //             improvedInstruction = improvedInstruction
+    //                 .replace(/drive (north|south|east|west)/gi, 'turn right')
+    //                 .replace(/turn (north|south|east|west)/gi, 'turn right')
+    //                 .replace(/head (north|south|east|west)/gi, 'turn right')
+    //                 .replace(/bear (north|south|east|west)/gi, 'keep right')
+    //                 .replace(/(north|south|east|west)/gi, 'right');
+    //         } else if (bearingDiff > 180 && bearingDiff < 345) {
+    //             // Left turn
+    //             console.log('⬅️ Detected LEFT turn');
+    //             improvedInstruction = improvedInstruction
+    //                 .replace(/drive (north|south|east|west)/gi, 'turn left')
+    //                 .replace(/turn (north|south|east|west)/gi, 'turn left')
+    //                 .replace(/head (north|south|east|west)/gi, 'turn left')
+    //                 .replace(/bear (north|south|east|west)/gi, 'keep left')
+    //                 .replace(/(north|south|east|west)/gi, 'left');
+    //         } else {
+    //             // Straight
+    //             console.log('⬆️ Detected STRAIGHT');
+    //             improvedInstruction = improvedInstruction
+    //                 .replace(/drive (north|south|east|west)/gi, 'continue straight')
+    //                 .replace(/turn (north|south|east|west)/gi, 'continue straight')
+    //                 .replace(/head (north|south|east|west)/gi, 'continue straight')
+    //                 .replace(/bear (north|south|east|west)/gi, 'continue straight')
+    //                 .replace(/(north|south|east|west)/gi, 'straight');
+    //         }
+    //     } else {
+    //         // Fallback to maneuver type matching
+    //         const patterns = [
+    //             { from: /drive (north|south|east|west)/gi, replacement: () => {
+    //                 if (maneuverType.includes('left')) return 'turn left';
+    //                 if (maneuverType.includes('right')) return 'turn right';
+    //                 return 'continue straight';
+    //             }},
+    //             { from: /turn (north|south|east|west)/gi, replacement: () => {
+    //                 if (maneuverType.includes('left')) return 'turn left';
+    //                 if (maneuverType.includes('right')) return 'turn right';
+    //                 return 'continue straight';
+    //             }},
+    //             { from: /head (north|south|east|west)/gi, replacement: 'continue straight' },
+    //             { from: /continue (north|south|east|west)/gi, replacement: 'continue straight' },
+    //             { from: /bear (north|south|east|west)/gi, replacement: () => {
+    //                 if (maneuverType.includes('left')) return 'keep left';
+    //                 if (maneuverType.includes('right')) return 'keep right';
+    //                 return 'continue straight';
+    //             }},
+    //             { from: /(north|south|east|west)/gi, replacement: () => {
+    //                 if (maneuverType.includes('left')) return 'left';
+    //                 if (maneuverType.includes('right')) return 'right';
+    //                 return 'straight';
+    //             }},
+    //         ];
+
+    //         patterns.forEach(pattern => {
+    //             if (typeof pattern.replacement === 'function') {
+    //                 improvedInstruction = improvedInstruction.replace(pattern.from, pattern.replacement);
+    //             } else {
+    //                 improvedInstruction = improvedInstruction.replace(pattern.from, pattern.replacement);
+    //             }
+    //         });
+    //     }
+
+    //     // Clean up text
+    //     improvedInstruction = improvedInstruction
+    //         .replace(/in \d+(\.\d+)? (meters|m)/gi, '') // Remove distance from instruction
+    //         .replace(/\s+/g, ' ') // Clean up extra spaces
+    //         .trim();
+
+    //     return improvedInstruction;
+    // };
+
+    // Helper to get Google Maps style maneuver icon with real-time polyline analysis
     const getTurnIcon = (maneuverType: string | undefined, step?: any) => {
+      // Use real-time polyline analysis if available
+      if (location && navigationRoute?.geometry?.coordinates) {
+        const polylineDirection = analyzePolylineDirection(location, navigationRoute.geometry.coordinates);
+        
+        console.log('🎯 Real-time Icon Selection:', polylineDirection.direction);
+        
+        // Select icon based on real-time polyline analysis
+        switch (polylineDirection.direction) {
+          case 'left':
+            return <MaterialCommunityIcons name="arrow-left-bold" size={36} color="#fff" />;
+          case 'right':
+            return <MaterialCommunityIcons name="arrow-right-bold" size={36} color="#fff" />;
+          case 'sharp-left':
+            return <MaterialCommunityIcons name="arrow-up-left-bold" size={36} color="#fff" />;
+          case 'sharp-right':
+            return <MaterialCommunityIcons name="arrow-up-right-bold" size={36} color="#fff" />;
+          case 'slight-left':
+            return <MaterialCommunityIcons name="arrow-up-left" size={36} color="#fff" />;
+          case 'slight-right':
+            return <MaterialCommunityIcons name="arrow-up-right" size={36} color="#fff" />;
+          case 'u-turn':
+            return <MaterialCommunityIcons name="backup-restore" size={36} color="#fff" />;
+          case 'straight':
+          default:
+            return <MaterialCommunityIcons name="arrow-up-bold" size={36} color="#fff" />;
+        }
+      }
+      
       if (!maneuverType) return <MaterialCommunityIcons name="arrow-up-bold" size={36} color="#fff" />;
       
       // If we have bearing information, use it to determine actual turn direction
@@ -438,8 +769,30 @@ function MapScreenContent() {
     };
 
     // --- Start Navigation ---
-    const handleStartNavigation = () => {
+    const handleStartNavigation = async () => {
+        // Prevent multiple calls
+        if (navigationMode === 'active') {
+            console.log('⚠️ Navigation already active, ignoring duplicate call');
+            return;
+        }
+
+        // Check if we have a valid route
+        if (!navigationRoute) {
+            console.error('❌ No navigation route available');
+            Alert.alert('Navigation Error', 'No route available for navigation');
+            return;
+        }
+
+        // Check if we have current location
+        if (!location) {
+            console.error('❌ No current location available');
+            Alert.alert('Location Error', 'Current location is required for navigation');
+            return;
+        }
+        
+        console.log('🚀 Starting navigation...');
         setNavigationMode('active');
+        
         if (location) {
             setNavigationStartLocation({
                 latitude: location.coords.latitude,
@@ -447,27 +800,12 @@ function MapScreenContent() {
                 heading: location.coords.heading,
             });
         }
+        
         startNavigationUpdates();
         
-        // Start high-precision location tracking for smooth navigation
-        locationTrackingService.startTracking({
-            accuracy: Location.Accuracy.BestForNavigation,
-            distanceInterval: 0.5, // Update every 0.5 meters for smoother movement
-            timeInterval: 500, // Update every 500ms for real-time updates
-            backgroundUpdates: true,
-            activityType: Location.ActivityType.AutomotiveNavigation,
-        }, {
-            onLocationUpdate: (locationData: LocationData) => {
-                // This will provide smooth location updates for the arrow
-                console.log('📍 High-precision location update for navigation:', locationData);
-            },
-            onSpeedChange: (speed: number) => {
-                console.log('🚗 Speed changed:', speed);
-            },
-            onHeadingChange: (heading: number) => {
-                setCompassHeading(heading);
-            }
-        });
+        // High-precision location tracking is handled by the existing startNavigationUpdates()
+        // which is already called above. No need for additional tracking service.
+        console.log('✅ Navigation location tracking started via LocationContext');
         
         // Focus on entire route when navigation starts (like Google Maps)
         if (navigationRoute && mapRef.current) {
@@ -480,12 +818,13 @@ function MapScreenContent() {
                 mapRef.current.fitRouteBounds(routeCoords, 120); // 120px padding around route
                 
                 // After fitting route, gradually focus on user position for navigation
+                const currentLocation = location;
                 setTimeout(() => {
-                    if (location && mapRef.current && navigationMode === 'active') {
+                    if (currentLocation && mapRef.current) {
                         console.log('🎯 Transitioning to user focus for active navigation');
                         mapRef.current.animateToLocation(
-                            location.coords.longitude,
-                            location.coords.latitude,
+                            currentLocation.coords.longitude,
+                            currentLocation.coords.latitude,
                             16 // Navigation zoom level after route overview
                         );
                     }
@@ -505,9 +844,7 @@ function MapScreenContent() {
         setSelectedRouteIndex(0);
         stopNavigationUpdates();
         
-        // Stop high-precision location tracking
-        locationTrackingService.stopTracking();
-        console.log('✅ Navigation state cleared and high-precision tracking stopped');
+        console.log('✅ Navigation state cleared and location tracking stopped via LocationContext');
         
         // Reset map to normal view
         if (location && mapRef.current) {
@@ -677,10 +1014,6 @@ function MapScreenContent() {
                 patrols={allPatrols}
                 mapType={mapType}
                 onPatrolSelect={setSelectedPatrol}
-                scrollEnabled={navigationMode === null}
-                zoomEnabled={navigationMode === null}
-                rotateEnabled={navigationMode === null}
-                pitchEnabled={navigationMode === null}
                 navigationRoute={navigationRoute}
                 navigationMode={navigationMode}
                 navigationDestination={navigationDestination}
@@ -689,6 +1022,8 @@ function MapScreenContent() {
                 onRouteSelect={handleRouteSelect}
                 navigationStartLocation={navigationStartLocation}
                 compassHeading={compassHeading}
+                nearbyPlaces={nearbyPlaces}
+                onPlaceSelect={handlePlaceSelect}
             />
 
             {/* Navigation UI overlays (not a map, just UI) */}
@@ -726,7 +1061,7 @@ function MapScreenContent() {
                     {navigationMode === 'active' && (
                         <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1002, pointerEvents: 'box-none' }} pointerEvents="box-none">
                             {/* Top turn card with Google Maps style icon */}
-                            {navigationRoute?.steps?.[0] && (
+                            {/* {navigationRoute?.steps?.[0] && (
                                 <View style={{ position: 'absolute', top: 40, left: 20, right: 20, backgroundColor: '#00897B', borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, elevation: 8, zIndex: 10 }}>
                                     <View style={{
                                         width: 48, height: 48, borderRadius: 24, backgroundColor: '#00897B',
@@ -766,7 +1101,7 @@ function MapScreenContent() {
                                         </Text>
                                     </View>
                                 </View>
-                            )}
+                            )} */}
                             {/* Google Maps style bottom summary bar */}
                             <View style={{ position: 'absolute', bottom: 1, left: 10, right: 10, backgroundColor: '#fff', borderRadius: 16, padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, elevation: 8, zIndex: 10 }}>
                                 {/* Cancel button */}
@@ -804,10 +1139,12 @@ function MapScreenContent() {
                 showTraffic={showTraffic}
                 onSearch={handleSearch}
                 onZoomToUser={handleZoomToUser}
-                onRefresh={() => {}} // No refresh needed for WebSocket
+                onRefresh={() => searchNearbyPlaces()} // Refresh places
                 onLayerChange={handleLayerChange}
                 onReportPatrol={handleReportPatrol}
-                showSearchBar={navigationMode !== 'active'}                />
+                showSearchBar={navigationMode !== 'active'}
+                onPlacesToggle={() => setShowPlaceCategories(!showPlaceCategories)}
+            />
 
             {/* Search Results Dropdown */}
             {showSearchResults && searchText.length > 2 && navigationMode === null && (
@@ -828,13 +1165,41 @@ function MapScreenContent() {
                 </View>
             )}
 
+            {/* Place Categories */}
+            <PlaceCategories
+                selectedCategories={selectedCategories}
+                onCategoryToggle={handleCategoryToggle}
+                onCategoryPress={handleCategoryPress}
+                isVisible={showPlaceCategories && navigationMode !== 'active'}
+            />
+
+            {/* Compact Place Categories in search */}
+            {showSearchResults && searchText.length < 3 && navigationMode === null && (
+                <View style={{ position: 'absolute', top: insets.top + 66, left: 20, right: 20, zIndex: 1999 }}>
+                    <CompactPlaceCategories
+                        onCategoryPress={handleCategoryPress}
+                        isVisible={true}
+                    />
+                </View>
+            )}
+
             {/* Navigation Instructions (active navigation bar) */}
             <NavigationInstructions />
+            
             {/* Patrol Details Modal */}
             <PatrolDetailsModal
                 patrol={selectedPatrol}
-                visible={!!selectedPatrol}
+                visible={!!selectedPatrol && !selectedPlace}
                 onClose={() => setSelectedPatrol(null)}
+                userLocation={location ? { latitude: location.coords.latitude, longitude: location.coords.longitude } : null}
+            />
+
+            {/* Place Details Modal */}
+            <PlaceDetailsModal
+                place={selectedPlace}
+                visible={!!selectedPlace}
+                onClose={() => setSelectedPlace(null)}
+                onNavigate={handlePlaceNavigation}
                 userLocation={location ? { latitude: location.coords.latitude, longitude: location.coords.longitude } : null}
             />
         </View>
@@ -852,5 +1217,6 @@ export default function MapScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        
     },
 });

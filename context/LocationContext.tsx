@@ -75,13 +75,8 @@ export const LocationProvider: React.FC<LocationProviderProps> = ({ children }) 
                 return false;
             }
 
-            // Request background permissions too (needed for navigation)
-            const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
-
-            // We can still function without background permission, but inform the user
-            if (backgroundStatus !== 'granted') {
-                console.log('Background location permission not granted');
-            }
+            // Skip background permission request - not needed without expo-task-manager
+            console.log('📱 Background location permission skipped - not supported without expo-task-manager');
 
             return true;
         } catch (err) {
@@ -151,41 +146,16 @@ export const LocationProvider: React.FC<LocationProviderProps> = ({ children }) 
     };
 
     const startBackgroundUpdates = async () => {
-        if (backgroundUpdateActive) return;
-
-        try {
-            await Location.startLocationUpdatesAsync('patrol-location-tracking', {
-                accuracy: Location.Accuracy.Balanced,
-                distanceInterval: 20, // Minimum change (in meters) before update
-                timeInterval: 15000, // Minimum time (in ms) between updates
-                foregroundService: {
-                    notificationTitle: "Patrol Navigation Running",
-                    notificationBody: "Tracking your location for navigation and patrol alerts",
-                },
-                // Android-specific
-                activityType: Location.ActivityType.AutomotiveNavigation,
-            });
-
-            setBackgroundUpdateActive(true);
-        } catch (err) {
-            console.error('Error starting background location updates:', err);
-        }
+        // Background location updates disabled - requires expo-task-manager
+        console.log('📱 Background location updates skipped - not supported without expo-task-manager');
+        return;
     };
 
     const stopBackgroundUpdates = async () => {
-        if (!backgroundUpdateActive) return;
-
-        try {
-            const isTaskRegistered = await Location.hasStartedLocationUpdatesAsync('patrol-location-tracking');
-
-            if (isTaskRegistered) {
-                await Location.stopLocationUpdatesAsync('patrol-location-tracking');
-            }
-
-            setBackgroundUpdateActive(false);
-        } catch (err) {
-            console.error('Error stopping background location updates:', err);
-        }
+        // Background location updates disabled - no need to stop what wasn't started
+        console.log('📱 Background location stop skipped - not active');
+        setBackgroundUpdateActive(false);
+        return;
     };
 
     return (

@@ -21,7 +21,7 @@ const handleResponse = async (response: Response) => {
 
     if (!response.ok) {
         throw new AuthError(
-            data.message || 'An error occurred during authentication',
+            data.detail || data.message || 'An error occurred during authentication',
             response.status
         );
     }
@@ -40,7 +40,9 @@ export const authApi = {
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Accept',
                 },
                 body: JSON.stringify({ email: email, password: password }),
             });
@@ -63,6 +65,9 @@ export const authApi = {
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, Accept',
             },
             body: JSON.stringify({ email, password, name, phone_number}),
         });

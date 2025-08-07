@@ -91,14 +91,14 @@ export function MapOverlays({
             )} */}
 
             {/* Location Permission Prompt */}
-            {!hasLocation && (
+            {/* {!hasLocation && (
                 <View style={[styles.locationPrompt, { bottom: bottomInset + 200 }]}>
                     <Ionicons name="location-outline" size={20} color="#007AFF" />
                     <Text style={styles.locationPromptText}>
                         Enable location for better experience
                     </Text>
                 </View>
-            )}
+            )} */}
         </>
     );
 }

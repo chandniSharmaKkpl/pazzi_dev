@@ -510,154 +510,154 @@ function MapScreenContent() {
     };
 
     // Helper to improve instruction text - convert east/west to left/right using real-time polyline analysis
-    // const improveInstructionText = (instruction: string, maneuverType: string | undefined, step?: any): string => {
-    //     if (!instruction || typeof instruction !== 'string') return 'Continue ahead';
-    //     if (!maneuverType) maneuverType = 'straight';
+    const improveInstructionText = (instruction: string, maneuverType: string | undefined, step?: any): string => {
+        if (!instruction || typeof instruction !== 'string') return 'Continue ahead';
+        if (!maneuverType) maneuverType = 'straight';
         
-    //     let improvedInstruction = instruction;
+        let improvedInstruction = instruction;
         
-    //     // Use real-time polyline analysis if we have location and route
-    //     if (location && navigationRoute?.geometry?.coordinates) {
-    //         const polylineDirection = analyzePolylineDirection(location, navigationRoute.geometry.coordinates);
+        // Use real-time polyline analysis if we have location and route
+        if (location && navigationRoute?.geometry?.coordinates) {
+            const polylineDirection = analyzePolylineDirection(location, navigationRoute.geometry.coordinates);
             
-    //         console.log('🗺️ Real-time Polyline Direction:', polylineDirection);
+            console.log('🗺️ Real-time Polyline Direction:', polylineDirection);
             
-    //         // Override instruction based on real-time polyline analysis
-    //         switch (polylineDirection.direction) {
-    //             case 'left':
-    //                 improvedInstruction = improvedInstruction
-    //                     .replace(/drive (north|south|east|west)/gi, 'turn left')
-    //                     .replace(/turn (north|south|east|west)/gi, 'turn left')
-    //                     .replace(/head (north|south|east|west)/gi, 'turn left')
-    //                     .replace(/(north|south|east|west)/gi, 'left');
-    //                 break;
-    //             case 'right':
-    //                 improvedInstruction = improvedInstruction
-    //                     .replace(/drive (north|south|east|west)/gi, 'turn right')
-    //                     .replace(/turn (north|south|east|west)/gi, 'turn right')
-    //                     .replace(/head (north|south|east|west)/gi, 'turn right')
-    //                     .replace(/(north|south|east|west)/gi, 'right');
-    //                 break;
-    //             case 'sharp-left':
-    //                 improvedInstruction = improvedInstruction
-    //                     .replace(/drive (north|south|east|west)/gi, 'sharp left turn')
-    //                     .replace(/turn (north|south|east|west)/gi, 'sharp left turn')
-    //                     .replace(/(north|south|east|west)/gi, 'sharp left');
-    //                 break;
-    //             case 'sharp-right':
-    //                 improvedInstruction = improvedInstruction
-    //                     .replace(/drive (north|south|east|west)/gi, 'sharp right turn')
-    //                     .replace(/turn (north|south|east|west)/gi, 'sharp right turn')
-    //                     .replace(/(north|south|east|west)/gi, 'sharp right');
-    //                 break;
-    //             case 'slight-left':
-    //                 improvedInstruction = improvedInstruction
-    //                     .replace(/drive (north|south|east|west)/gi, 'keep left')
-    //                     .replace(/turn (north|south|east|west)/gi, 'keep left')
-    //                     .replace(/(north|south|east|west)/gi, 'slight left');
-    //                 break;
-    //             case 'slight-right':
-    //                 improvedInstruction = improvedInstruction
-    //                     .replace(/drive (north|south|east|west)/gi, 'keep right')
-    //                     .replace(/turn (north|south|east|west)/gi, 'keep right')
-    //                     .replace(/(north|south|east|west)/gi, 'slight right');
-    //                 break;
-    //             case 'u-turn':
-    //                 improvedInstruction = 'Make a U-turn';
-    //                 break;
-    //             default:
-    //                 improvedInstruction = improvedInstruction
-    //                     .replace(/drive (north|south|east|west)/gi, 'continue straight')
-    //                     .replace(/turn (north|south|east|west)/gi, 'continue straight')
-    //                     .replace(/head (north|south|east|west)/gi, 'continue straight')
-    //                     .replace(/(north|south|east|west)/gi, 'straight');
-    //         }
-    //     } else if (step?.maneuver?.bearing_before !== undefined && step?.maneuver?.bearing_after !== undefined) {
-    //         // Fallback to bearing-based analysis
-    //         const bearingBefore = step.maneuver.bearing_before;
-    //         const bearingAfter = step.maneuver.bearing_after;
-    //         const bearingDiff = (bearingAfter - bearingBefore + 360) % 360;
+            // Override instruction based on real-time polyline analysis
+            switch (polylineDirection.direction) {
+                case 'left':
+                    improvedInstruction = improvedInstruction
+                        .replace(/drive (north|south|east|west)/gi, 'turn left')
+                        .replace(/turn (north|south|east|west)/gi, 'turn left')
+                        .replace(/head (north|south|east|west)/gi, 'turn left')
+                        .replace(/(north|south|east|west)/gi, 'left');
+                    break;
+                case 'right':
+                    improvedInstruction = improvedInstruction
+                        .replace(/drive (north|south|east|west)/gi, 'turn right')
+                        .replace(/turn (north|south|east|west)/gi, 'turn right')
+                        .replace(/head (north|south|east|west)/gi, 'turn right')
+                        .replace(/(north|south|east|west)/gi, 'right');
+                    break;
+                case 'sharp-left':
+                    improvedInstruction = improvedInstruction
+                        .replace(/drive (north|south|east|west)/gi, 'sharp left turn')
+                        .replace(/turn (north|south|east|west)/gi, 'sharp left turn')
+                        .replace(/(north|south|east|west)/gi, 'sharp left');
+                    break;
+                case 'sharp-right':
+                    improvedInstruction = improvedInstruction
+                        .replace(/drive (north|south|east|west)/gi, 'sharp right turn')
+                        .replace(/turn (north|south|east|west)/gi, 'sharp right turn')
+                        .replace(/(north|south|east|west)/gi, 'sharp right');
+                    break;
+                case 'slight-left':
+                    improvedInstruction = improvedInstruction
+                        .replace(/drive (north|south|east|west)/gi, 'keep left')
+                        .replace(/turn (north|south|east|west)/gi, 'keep left')
+                        .replace(/(north|south|east|west)/gi, 'slight left');
+                    break;
+                case 'slight-right':
+                    improvedInstruction = improvedInstruction
+                        .replace(/drive (north|south|east|west)/gi, 'keep right')
+                        .replace(/turn (north|south|east|west)/gi, 'keep right')
+                        .replace(/(north|south|east|west)/gi, 'slight right');
+                    break;
+                case 'u-turn':
+                    improvedInstruction = 'Make a U-turn';
+                    break;
+                default:
+                    improvedInstruction = improvedInstruction
+                        .replace(/drive (north|south|east|west)/gi, 'continue straight')
+                        .replace(/turn (north|south|east|west)/gi, 'continue straight')
+                        .replace(/head (north|south|east|west)/gi, 'continue straight')
+                        .replace(/(north|south|east|west)/gi, 'straight');
+            }
+        } else if (step?.maneuver?.bearing_before !== undefined && step?.maneuver?.bearing_after !== undefined) {
+            // Fallback to bearing-based analysis
+            const bearingBefore = step.maneuver.bearing_before;
+            const bearingAfter = step.maneuver.bearing_after;
+            const bearingDiff = (bearingAfter - bearingBefore + 360) % 360;
             
-    //         console.log('🧮 Bearing Calculation:', {
-    //             bearingBefore,
-    //             bearingAfter,
-    //             bearingDiff,
-    //             originalInstruction: instruction
-    //         });
+            console.log('🧮 Bearing Calculation:', {
+                bearingBefore,
+                bearingAfter,
+                bearingDiff,
+                originalInstruction: instruction
+            });
             
-    //         // Determine turn direction based on bearing change
-    //         if (bearingDiff > 15 && bearingDiff < 180) {
-    //             // Right turn
-    //             console.log('➡️ Detected RIGHT turn');
-    //             improvedInstruction = improvedInstruction
-    //                 .replace(/drive (north|south|east|west)/gi, 'turn right')
-    //                 .replace(/turn (north|south|east|west)/gi, 'turn right')
-    //                 .replace(/head (north|south|east|west)/gi, 'turn right')
-    //                 .replace(/bear (north|south|east|west)/gi, 'keep right')
-    //                 .replace(/(north|south|east|west)/gi, 'right');
-    //         } else if (bearingDiff > 180 && bearingDiff < 345) {
-    //             // Left turn
-    //             console.log('⬅️ Detected LEFT turn');
-    //             improvedInstruction = improvedInstruction
-    //                 .replace(/drive (north|south|east|west)/gi, 'turn left')
-    //                 .replace(/turn (north|south|east|west)/gi, 'turn left')
-    //                 .replace(/head (north|south|east|west)/gi, 'turn left')
-    //                 .replace(/bear (north|south|east|west)/gi, 'keep left')
-    //                 .replace(/(north|south|east|west)/gi, 'left');
-    //         } else {
-    //             // Straight
-    //             console.log('⬆️ Detected STRAIGHT');
-    //             improvedInstruction = improvedInstruction
-    //                 .replace(/drive (north|south|east|west)/gi, 'continue straight')
-    //                 .replace(/turn (north|south|east|west)/gi, 'continue straight')
-    //                 .replace(/head (north|south|east|west)/gi, 'continue straight')
-    //                 .replace(/bear (north|south|east|west)/gi, 'continue straight')
-    //                 .replace(/(north|south|east|west)/gi, 'straight');
-    //         }
-    //     } else {
-    //         // Fallback to maneuver type matching
-    //         const patterns = [
-    //             { from: /drive (north|south|east|west)/gi, replacement: () => {
-    //                 if (maneuverType.includes('left')) return 'turn left';
-    //                 if (maneuverType.includes('right')) return 'turn right';
-    //                 return 'continue straight';
-    //             }},
-    //             { from: /turn (north|south|east|west)/gi, replacement: () => {
-    //                 if (maneuverType.includes('left')) return 'turn left';
-    //                 if (maneuverType.includes('right')) return 'turn right';
-    //                 return 'continue straight';
-    //             }},
-    //             { from: /head (north|south|east|west)/gi, replacement: 'continue straight' },
-    //             { from: /continue (north|south|east|west)/gi, replacement: 'continue straight' },
-    //             { from: /bear (north|south|east|west)/gi, replacement: () => {
-    //                 if (maneuverType.includes('left')) return 'keep left';
-    //                 if (maneuverType.includes('right')) return 'keep right';
-    //                 return 'continue straight';
-    //             }},
-    //             { from: /(north|south|east|west)/gi, replacement: () => {
-    //                 if (maneuverType.includes('left')) return 'left';
-    //                 if (maneuverType.includes('right')) return 'right';
-    //                 return 'straight';
-    //             }},
-    //         ];
+            // Determine turn direction based on bearing change
+            if (bearingDiff > 15 && bearingDiff < 180) {
+                // Right turn
+                console.log('➡️ Detected RIGHT turn');
+                improvedInstruction = improvedInstruction
+                    .replace(/drive (north|south|east|west)/gi, 'turn right')
+                    .replace(/turn (north|south|east|west)/gi, 'turn right')
+                    .replace(/head (north|south|east|west)/gi, 'turn right')
+                    .replace(/bear (north|south|east|west)/gi, 'keep right')
+                    .replace(/(north|south|east|west)/gi, 'right');
+            } else if (bearingDiff > 180 && bearingDiff < 345) {
+                // Left turn
+                console.log('⬅️ Detected LEFT turn');
+                improvedInstruction = improvedInstruction
+                    .replace(/drive (north|south|east|west)/gi, 'turn left')
+                    .replace(/turn (north|south|east|west)/gi, 'turn left')
+                    .replace(/head (north|south|east|west)/gi, 'turn left')
+                    .replace(/bear (north|south|east|west)/gi, 'keep left')
+                    .replace(/(north|south|east|west)/gi, 'left');
+            } else {
+                // Straight
+                console.log('⬆️ Detected STRAIGHT');
+                improvedInstruction = improvedInstruction
+                    .replace(/drive (north|south|east|west)/gi, 'continue straight')
+                    .replace(/turn (north|south|east|west)/gi, 'continue straight')
+                    .replace(/head (north|south|east|west)/gi, 'continue straight')
+                    .replace(/bear (north|south|east|west)/gi, 'continue straight')
+                    .replace(/(north|south|east|west)/gi, 'straight');
+            }
+        } else {
+            // Fallback to maneuver type matching
+            const patterns = [
+                { from: /drive (north|south|east|west)/gi, replacement: () => {
+                    if (maneuverType.includes('left')) return 'turn left';
+                    if (maneuverType.includes('right')) return 'turn right';
+                    return 'continue straight';
+                }},
+                { from: /turn (north|south|east|west)/gi, replacement: () => {
+                    if (maneuverType.includes('left')) return 'turn left';
+                    if (maneuverType.includes('right')) return 'turn right';
+                    return 'continue straight';
+                }},
+                { from: /head (north|south|east|west)/gi, replacement: 'continue straight' },
+                { from: /continue (north|south|east|west)/gi, replacement: 'continue straight' },
+                { from: /bear (north|south|east|west)/gi, replacement: () => {
+                    if (maneuverType.includes('left')) return 'keep left';
+                    if (maneuverType.includes('right')) return 'keep right';
+                    return 'continue straight';
+                }},
+                { from: /(north|south|east|west)/gi, replacement: () => {
+                    if (maneuverType.includes('left')) return 'left';
+                    if (maneuverType.includes('right')) return 'right';
+                    return 'straight';
+                }},
+            ];
 
-    //         patterns.forEach(pattern => {
-    //             if (typeof pattern.replacement === 'function') {
-    //                 improvedInstruction = improvedInstruction.replace(pattern.from, pattern.replacement);
-    //             } else {
-    //                 improvedInstruction = improvedInstruction.replace(pattern.from, pattern.replacement);
-    //             }
-    //         });
-    //     }
+            patterns.forEach(pattern => {
+                if (typeof pattern.replacement === 'function') {
+                    improvedInstruction = improvedInstruction.replace(pattern.from, pattern.replacement);
+                } else {
+                    improvedInstruction = improvedInstruction.replace(pattern.from, pattern.replacement);
+                }
+            });
+        }
 
-    //     // Clean up text
-    //     improvedInstruction = improvedInstruction
-    //         .replace(/in \d+(\.\d+)? (meters|m)/gi, '') // Remove distance from instruction
-    //         .replace(/\s+/g, ' ') // Clean up extra spaces
-    //         .trim();
+        // Clean up text
+        improvedInstruction = improvedInstruction
+            .replace(/in \d+(\.\d+)? (meters|m)/gi, '') // Remove distance from instruction
+            .replace(/\s+/g, ' ') // Clean up extra spaces
+            .trim();
 
-    //     return improvedInstruction;
-    // };
+        return improvedInstruction;
+    };
 
     // Helper to get Google Maps style maneuver icon with real-time polyline analysis
     const getTurnIcon = (maneuverType: string | undefined, step?: any) => {
@@ -1024,6 +1024,18 @@ function MapScreenContent() {
                 compassHeading={compassHeading}
                 nearbyPlaces={nearbyPlaces}
                 onPlaceSelect={handlePlaceSelect}
+                originLocation={location && location.coords && 
+                    typeof location.coords.longitude === 'number' && 
+                    typeof location.coords.latitude === 'number' && 
+                    !isNaN(location.coords.longitude) && 
+                    !isNaN(location.coords.latitude) ? 
+                    [location.coords.longitude, location.coords.latitude] : undefined}
+                destinationLocation={navigationDestination && 
+                    typeof navigationDestination.longitude === 'number' && 
+                    typeof navigationDestination.latitude === 'number' && 
+                    !isNaN(navigationDestination.longitude) && 
+                    !isNaN(navigationDestination.latitude) ? 
+                    [navigationDestination.longitude, navigationDestination.latitude] : undefined}
             />
 
             {/* Navigation UI overlays (not a map, just UI) */}
@@ -1148,7 +1160,7 @@ function MapScreenContent() {
 
             {/* Search Results Dropdown */}
             {showSearchResults && searchText.length > 2 && navigationMode === null && (
-                <View style={{ position: 'absolute', top: insets.top + 66, left: 20, right: 20, backgroundColor: '#fff', borderRadius: 12, zIndex: 2000, maxHeight: 250, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, elevation: 8 }}>
+                <View style={{ position: 'absolute', top: insets.top + 76, left: 20, right: 20, backgroundColor: '#fff', borderRadius: 12, zIndex: 2000, maxHeight: 250, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, elevation: 8 }}>
                     {searchLoading ? (
                         <ActivityIndicator style={{ margin: 16 }} />
                     ) : (

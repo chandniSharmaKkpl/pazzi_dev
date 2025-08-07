@@ -1,10 +1,12 @@
 import React, { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { View, StyleSheet, Platform, Text, TouchableOpacity, Animated, Dimensions, Image } from 'react-native';
+import { View, StyleSheet, Platform, Text, TouchableOpacity, Animated, Dimensions, Image, SafeAreaView } from 'react-native';
 import * as Location from 'expo-location';
 import { Patrol } from '../../types/patrol';
 import { PatrolMarker } from './PatrolMarker';
 import { UserLocationMarker } from './UserLocationMarker';
 import { PlaceMarker, FallbackPlaceMarker } from './PlaceMarker';
+// import { OriginMarker } from './OriginMarker';
+// import { DestinationMarker } from './DestinationMarker';
 import { useNavigation } from '../../context/NavigationContext';
 import MapboxGL from '@rnmapbox/maps';
 import { FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -68,6 +70,8 @@ interface PatrolMapViewProps {
     compassHeading?: number;
     nearbyPlaces?: Place[];
     onPlaceSelect?: (place: Place) => void;
+    // originLocation?: [number, number];
+    // destinationLocation?: [number, number];
 }
 
 export interface PatrolMapViewRef {
@@ -90,7 +94,9 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
                                   onRouteSelect,
                                   compassHeading,
                                   nearbyPlaces = [],
-                                  onPlaceSelect
+                                  onPlaceSelect,
+                                //   originLocation,
+                                //   destinationLocation
                               }, ref) => {
     const mapRef = useRef<any>(null);
     const cameraRef = useRef<any>(null);
@@ -98,6 +104,7 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
     const [centerCoordinate, setCenterCoordinate] = useState<[number, number]>([20.5, 44.4]);
     const [isMapReady, setIsMapReady] = useState(false);
     const [followUser, setFollowUser] = useState(true);
+    const [mapHeading, setMapHeading] = useState(0);
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const scaleAnim = useRef(new Animated.Value(0)).current;
 
@@ -416,22 +423,22 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
 
         // Only move forward or allow small backwards movements
         const targetProgress = distanceAlongRoute;
-        const maxBackwardDistance = 15; // meters - reduced for better accuracy
-        const smoothingFactor = Math.min(deltaTime / 200, 1); // Faster response - 200ms
+        const maxBackwardDistance = 0.5; // meters - even tighter for immediate response
+        const smoothingFactor = Math.min(deltaTime / 15, 1); // Even faster response - 25ms
 
         if (targetProgress > smoothProgressRef.current) {
-            // Moving forward - immediate update with minimal smoothing for real-time feel
-            const forwardSmoothingFactor = Math.min(smoothingFactor * 5, 1); // Very responsive forward movement
+            // Moving forward - much more responsive for real-time feel
+            const forwardSmoothingFactor = 1; // Increased from 0.3 to 0.8 for faster response
             smoothProgressRef.current = smoothProgressRef.current + (targetProgress - smoothProgressRef.current) * forwardSmoothingFactor;
         } else if (targetProgress < smoothProgressRef.current - maxBackwardDistance) {
             // Large backward jump (GPS error or route recalculation) - allow it immediately
             smoothProgressRef.current = targetProgress;
         } else if (minDist < 10) {
-            // User is very close to route - allow more responsive movement
-            smoothProgressRef.current = Math.max(targetProgress, smoothProgressRef.current - 3 * smoothingFactor);
+            // User is very close to route - much more responsive movement
+            smoothProgressRef.current = smoothProgressRef.current + (targetProgress - smoothProgressRef.current) * 0.7;
         } else {
-            // User is farther from route - be more conservative but still responsive
-            smoothProgressRef.current = Math.max(targetProgress, smoothProgressRef.current - smoothingFactor);
+            // User is farther from route - still more responsive than before
+            smoothProgressRef.current = smoothProgressRef.current + (targetProgress - smoothProgressRef.current) * 0.4;
         }
 
         // Convert smooth progress back to coordinate and index
@@ -621,7 +628,8 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
     let fullRouteCoords = [];
     let traveledRouteCoords = [];
     let arrowCoord = null;
-    let arrowHeading = 0;
+    const lastArrowCoord = useRef<[number, number] | null>(null);
+    const lastArrowHeading = useRef<number>(0);
     let userProgress = 0;
     let currentRouteDirection: { direction: 'straight' | 'left' | 'right' | 'sharp-left' | 'sharp-right' | 'slight-left' | 'slight-right' | 'u-turn', bearing: number, nextTurnDistance: number } = { direction: 'straight', bearing: 0, nextTurnDistance: 0 };
     
@@ -673,9 +681,8 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
             accumulatedDistance += segmentLength;
         }
         
-        // Set arrow position and heading
+        // Set arrow position
         arrowCoord = progress.coordinate;
-        arrowHeading = progress.heading;
         
         // Calculate real-time route direction for navigation instructions
         try {
@@ -702,7 +709,7 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
     // If Mapbox is available, use it
     if (Mapbox && MapView && PointAnnotation) {
         return (
-            <View style={styles.container}>
+            <SafeAreaView style={styles.container}>
             <MapView
                 ref={mapRef}
                 style={styles.map}
@@ -712,20 +719,29 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
                 pitchEnabled={true}
                 rotateEnabled={true}
                 compassEnabled={true}
+                compassViewPosition={1}
+                compassViewMargins={{x: 10, y:150}}
                 scaleBarEnabled={false}
                 logoEnabled={false}
                 attributionEnabled={false}
                     onDidFinishLoadingMap={handleMapReady}
                     onTouchStart={() => setFollowUser(false)}
+                    onRegionDidChange={(event: any) => {
+                        try {
+                            const heading = event?.properties?.heading || 0;
+                            setMapHeading(heading);
+                        } catch (error) {
+                            // Ignore heading update errors
+                        }
+                    }}
             >
                 <MapboxGL.Camera
                     ref={cameraRef}
                     centerCoordinate={centerCoordinate}
                     // zoomLevel={12}
                     pitch={navigationMode === 'active' ? 45 : 0}
-                    // heading={navigationMode === 'active' && typeof compassHeading === 'number' ? compassHeading : (location?.coords?.heading ?? 0)} // Auto-rotation disabled
                     animationMode="flyTo"
-                    animationDuration={1000}
+                    animationDuration={300}
                 />
 
                 {/* Load navigation icon image */}
@@ -765,44 +781,66 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
                 {/* Enhanced navigation with progressive route coloring */}
                 {navigationMode === 'active' && fullRouteCoords.length > 0 && (
                   <>
-                    {/* Create single route with gradient from blue to grey based on user progress */}
-                    <ShapeSource 
-                        id="progressive-route" 
-                        shape={{
-                            type: 'Feature',
-                            properties: {
-                                traveledDistance: userProgress,
-                                totalDistance: (() => {
-                                    let total = 0;
-                                    for (let i = 0; i < fullRouteCoords.length - 1; i++) {
-                                        const segStart = fullRouteCoords[i];
-                                        const segEnd = fullRouteCoords[i + 1];
-                                        total += getDistance(segStart[1], segStart[0], segEnd[1], segEnd[0]);
-                                    }
-                                    return total;
-                                })()
-                            },
-                            geometry: {
-                                type: 'LineString',
-                                coordinates: fullRouteCoords,
+                    {/* Progressive blue line that erases from behind as user moves */}
+                    {(() => {
+                        // Create remaining route coordinates that start from current position
+                        const remainingBlueCoords = [];
+                        if (arrowCoord && fullRouteCoords.length > 0) {
+                            // Start from current arrow position
+                            remainingBlueCoords.push(arrowCoord);
+                            
+                            // Find closest route point to current position
+                            let closestIndex = 0;
+                            let minDistance = Infinity;
+                            
+                            for (let i = 0; i < fullRouteCoords.length; i++) {
+                                const distance = Math.sqrt(
+                                    Math.pow(fullRouteCoords[i][0] - arrowCoord[0], 2) + 
+                                    Math.pow(fullRouteCoords[i][1] - arrowCoord[1], 2)
+                                );
+                                if (distance < minDistance) {
+                                    minDistance = distance;
+                                    closestIndex = i;
+                                }
                             }
-                        }}
-                    >
-                        <LineLayer
-                            id="progressive-route-line"
-                            style={{
-                                lineColor: '#1976D2',
-                                lineWidth: 10,
-                                lineCap: 'round',
-                                lineJoin: 'round',
-                                lineOpacity: 0.9,
-                                lineSortKey: 10,
-                            }}
-                        />
-                    </ShapeSource>
+                            
+                            // Add all remaining route points
+                            for (let i = closestIndex; i < fullRouteCoords.length; i++) {
+                                remainingBlueCoords.push(fullRouteCoords[i]);
+                            }
+                        } else {
+                            // Fallback to full route if no current position
+                            remainingBlueCoords.push(...fullRouteCoords);
+                        }
+                        
+                        return remainingBlueCoords.length >= 2 ? (
+                            <ShapeSource 
+                                id="progressive-erasing-route" 
+                                shape={{
+                                    type: 'Feature',
+                                    geometry: {
+                                        type: 'LineString',
+                                        coordinates: remainingBlueCoords,
+                                    }
+                                }}
+                            >
+                                <LineLayer
+                                    id="progressive-erasing-route-line"
+                                    style={{
+                                        lineColor: '#1976D2',
+                                        lineWidth: 10,
+                                        lineCap: 'round',
+                                        lineJoin: 'round',
+                                        lineOpacity: 0.9,
+                                        lineSortKey: 10,
+                                    }}
+                                />
+                            </ShapeSource>
+                        ) : null;
+                    })()}
                     
-                    {/* Backup: Fallback to separate lines if gradient not supported */}
-                    {traveledRouteCoords.length >= 2 && (
+                    {/* Hide traveled route completely - no polyline behind user */}
+                    {false && traveledRouteCoords.length >= 2 && (
                       <ShapeSource id="traveled-route-fallback" shape={{
                           type: 'Feature',
                           geometry: {
@@ -813,7 +851,7 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
                           <LineLayer
                               id="traveled-route-line-fallback"
                               style={{
-                                  lineColor: '#CCCCCC',
+                                  lineColor: '#f8fcf809', // Green for traveled portion
                                   lineWidth: 10,
                                   lineCap: 'round',
                                   lineJoin: 'round',
@@ -824,51 +862,7 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
                       </ShapeSource>
                     )}
                     
-                    {/* Remaining portion (blue) - fallback */}
-                    {(() => {
-                        const remainingCoords = [];
-                        if (traveledRouteCoords.length > 0 && fullRouteCoords.length > 0) {
-                            const lastTraveledPoint = traveledRouteCoords[traveledRouteCoords.length - 1];
-                            remainingCoords.push(lastTraveledPoint);
-                            
-                            let startIndex = 0;
-                            for (let i = 0; i < fullRouteCoords.length; i++) {
-                                if (Math.abs(fullRouteCoords[i][0] - lastTraveledPoint[0]) < 0.0001 && 
-                                    Math.abs(fullRouteCoords[i][1] - lastTraveledPoint[1]) < 0.0001) {
-                                    startIndex = i;
-                                    break;
-                                }
-                            }
-                            
-                            for (let i = startIndex + 1; i < fullRouteCoords.length; i++) {
-                                remainingCoords.push(fullRouteCoords[i]);
-                            }
-                        } else {
-                            remainingCoords.push(...fullRouteCoords);
-                        }
-                        
-                        return remainingCoords.length >= 2 ? (
-                            <ShapeSource id="remaining-route-fallback" shape={{
-                                type: 'Feature',
-                                geometry: {
-                                    type: 'LineString',
-                                    coordinates: remainingCoords,
-                                }
-                            }}>
-                                <LineLayer
-                                    id="remaining-route-line-fallback"
-                                    style={{
-                                        lineColor: '#1976D2',
-                                        lineWidth: 10,
-                                        lineCap: 'round',
-                                        lineJoin: 'round',
-                                        lineOpacity: 0.8,
-                                        lineSortKey: 1,
-                                    }}
-                                />
-                            </ShapeSource>
-                        ) : null;
-                    })()}
+                    {/* Old remaining route section removed - now using progressive erasing route above */}
                   </>
                 )}
 
@@ -1052,6 +1046,40 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
                     />
                 ))}
 
+                {/* Origin marker */}
+                {/* {(() => {
+                    console.log('🟢 Origin Location Debug:', originLocation);
+                    return originLocation && 
+                           Array.isArray(originLocation) && 
+                           originLocation.length === 2 && 
+                           typeof originLocation[0] === 'number' && 
+                           typeof originLocation[1] === 'number' && 
+                           !isNaN(originLocation[0]) && 
+                           !isNaN(originLocation[1]) && (
+                        <OriginMarker
+                            coordinate={originLocation}
+                            onPress={() => console.log('Origin marker pressed')}
+                        />
+                    );
+                })()} */}
+
+                {/* Destination marker */}
+                {/* {(() => {
+                    console.log('🔴 Destination Location Debug:', destinationLocation);
+                    return destinationLocation && 
+                           Array.isArray(destinationLocation) && 
+                           destinationLocation.length === 2 && 
+                           typeof destinationLocation[0] === 'number' && 
+                           typeof destinationLocation[1] === 'number' && 
+                           !isNaN(destinationLocation[0]) && 
+                           !isNaN(destinationLocation[1]) && (
+                        <DestinationMarker
+                            coordinate={destinationLocation}
+                            onPress={() => console.log('Destination marker pressed')}
+                        />
+                    );
+                })()} */}
+
                 {/* Navigation Arrow - using ShapeSource for better layering control */}
                 {navigationMode === 'active' && arrowCoord && ShapeSource && (
                     <>
@@ -1081,11 +1109,14 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
                                 style={{
                                     iconImage: 'navigation-arrow-icon',
                                     iconSize: 0.4,
-                                    iconRotate: arrowHeading -180, // Rotate arrow to match movement direction
+                                    iconRotate: compassHeading , // Arrow shows compass direction relative to map rotation
+                                    iconRotationAlignment: 'map', // Rotate with map so arrow shows correct direction on rotated map
                                     iconAnchor: 'center',
                                     symbolSortKey: 99999,
                                     iconAllowOverlap: true,                           
                                     iconIgnorePlacement: true,
+                                    
+                                    
                                 }}
                             />
                         </ShapeSource>
@@ -1106,7 +1137,7 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
                 {/* Overlay UI Elements */}
                 {/* <StatsPanel />
                 <MapControls />
-                 */}
+                */}
                 {/* Loading indicator */}
                 {!isMapReady && (
                     <View style={styles.loadingOverlay}>
@@ -1123,7 +1154,7 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
                         </View>
                     </View>
                 )}
-            </View>
+            </SafeAreaView>
         );
     }
 
@@ -1133,7 +1164,7 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
         const Marker = ReactNativeMaps.Marker;
         
         return (
-            <View style={styles.container}>
+            <SafeAreaView style={styles.container}>
             <MapViewFallback
                 ref={mapRef}
                 style={styles.map}
@@ -1194,7 +1225,7 @@ export const PatrolMapView = forwardRef<PatrolMapViewRef, PatrolMapViewProps>(({
                     />
                 ))}
             </MapViewFallback>
-</View>
+</SafeAreaView>
         );
     }
 

@@ -23,7 +23,13 @@
         "NSLocationAlwaysUsageDescription": "This app needs access to your location even when the app is in the background.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to your location for best navigation experience.",
         "NSAppTransportSecurity": {
-          "NSAllowsArbitraryLoads": true
+          "NSAllowsArbitraryLoads": true,
+          "NSExceptionDomains": {
+            "116.203.83.167": {
+              "NSExceptionAllowsInsecureHTTPLoads": true,
+              "NSExceptionMinimumTLSVersion": "TLSv1.0"
+            }
+          }
         },
         "UIBackgroundModes": [
           "location",
@@ -42,7 +48,9 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION"
+        "ACCESS_BACKGROUND_LOCATION",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE"
       ],
       "usesCleartextTraffic": true,
       "edgeToEdgeEnabled": true,

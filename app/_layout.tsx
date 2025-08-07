@@ -30,19 +30,30 @@ function useProtectedRoute() {
       inAuthGroup,
       inTabsGroup,
       inWelcome,
-      isLoading
+      isLoading,
+      fullSegments: segments
     });
 
-    // TEMPORARILY DISABLE ALL NAVIGATION LOGIC FOR DEBUGGING
-    // This will allow registration to work without any redirects
+    // CRITICAL: Prevent any navigation if we're in auth screens
+    // This stops unwanted redirects during registration/login errors
+    if (inAuthGroup) {
+      console.log('🚫 In auth group - preventing any auto-navigation');
+      return;
+    }
+
+    // Only allow these specific navigation scenarios:
+    // 1. Authenticated user in welcome -> redirect to tabs
+    // 2. Unauthenticated user in tabs -> redirect to welcome
     
-    // Only allow navigation to tabs if user is authenticated and on auth/welcome
-    if (isAuthenticated && (inAuthGroup || inWelcome)) {
-      console.log('🔄 Redirecting to tabs - user authenticated');
+    if (isAuthenticated && inWelcome) {
+      console.log('🔄 Redirecting to tabs - user authenticated from welcome');
       router.replace('/(tabs)');
+    } else if (!isAuthenticated && inTabsGroup) {
+      console.log('🔄 Redirecting to welcome - user not authenticated');
+      router.replace('/');
     }
     
-    // Don't redirect from auth pages to welcome - let registration work
+    // All other cases: do nothing, let user stay where they are
   }, [isAuthenticated, isLoading, router, segments]);
 
   return { isLoading };
